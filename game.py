@@ -3,6 +3,10 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 import math
 import random
+import time
+
+last_time = time.time()
+
 #COLORS
 RED = (1, 0, 0)
 GREEN = (0, 1, 0)
@@ -53,13 +57,23 @@ GRID_START_Y = -GRID_LENGTH
 
 #Player info
 player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
+PLAYER_ANGLE = 0
+PLAYER_SPEED = 10
+PLAYER_RADIUS = 60
 
 # Camera-related variables - behind player
-camera_pos = [player_pos[0], player_pos[1] + 1000, player_pos[2] + 500]
+camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
 CAMERA_SPEED = 5
 CAMERA_THETA = 0
 
 target_pos = [player_pos[0], player_pos[1], player_pos[2]]
+
+key_buffer = {
+    'up': False,
+    'down': False,
+    'left': False,
+    'right': False
+}
 
 
 
@@ -178,7 +192,8 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
 
 def drawPlayer():
     glPushMatrix()
-    glTranslatef(player_pos[0], player_pos[1], player_pos[2] + 75)  # Move to player position
+    glTranslatef(player_pos[0], player_pos[1], player_pos[2] + 75)
+    glRotatef(-PLAYER_ANGLE,0,0,1)  
     glScalef(1.5,1.5,1.5)
     #feet
     glPushMatrix()
@@ -278,11 +293,109 @@ def drawPlayer():
 
     glPopMatrix()
 
+#=================   Player Movement ===============================
+def PlayerMovement(dt):
+    global key_buffer,player_pos, camera_pos,PLAYER_ANGLE,PLAYER_SPEED, CAMERA_THETA, target_pos
+    rot_speed = 80
+    px, py, pz = player_pos
+    cx, cy, cz = camera_pos
+
+    PLAYER_ANGLE = CAMERA_THETA
+
+    pspeed = PLAYER_SPEED* 200 * dt
+
+    dx = cx - px
+    dy = cy - py
+    radius = math.sqrt(dx*dx + dy*dy)
+    nx, ny = 0, 0
+
+    if key_buffer['up']:
+        nx += pspeed * math.sin(math.radians(PLAYER_ANGLE))
+        ny += pspeed * math.cos(math.radians(PLAYER_ANGLE))
+
+    if key_buffer['down']:
+        nx -= pspeed * math.sin(math.radians(PLAYER_ANGLE))
+        ny -= pspeed * math.cos(math.radians(PLAYER_ANGLE))
+    
+    #check if next step hits a wall
+    if not collides_with_wall(px+nx, py+ny):
+        px += nx
+        py += ny
+
+    #check if current position is outside and clamp it
+    px, py = clamp_to_map(px, py)
+        
+    if key_buffer['left']:
+        CAMERA_THETA -= CAMERA_SPEED * rot_speed * dt
+    if key_buffer['right']:
+        CAMERA_THETA += CAMERA_SPEED * rot_speed * dt
+  
+
+    theta_rad = math.radians(CAMERA_THETA+180)
+    cx = px + radius * math.sin(theta_rad)
+    cy = py + radius * math.cos(theta_rad)
+
+
+    player_pos = [px, py, pz]
+    camera_pos = [cx, cy, cz]
+    target_pos = [px, py, pz]
+
+#==============  Collosion Detection ===========================
+def collides_with_wall(x, y):
+    global PLAYER_RADIUS
+    offsets = [
+        ( PLAYER_RADIUS, 0),
+        (-PLAYER_RADIUS, 0),
+        (0,  PLAYER_RADIUS),
+        (0, -PLAYER_RADIUS),
+    ]
+
+    for ox, oy in offsets:
+        tile = get_tile_type(x + ox, y + oy)
+        if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL):
+            return True
+    return False
+def clamp_to_map(x, y):
+    global PLAYER_RADIUS
+    min_x = -GRID_LENGTH + PLAYER_RADIUS
+    max_x =  GRID_LENGTH - PLAYER_RADIUS
+    min_y = -GRID_LENGTH + PLAYER_RADIUS
+    max_y =  GRID_LENGTH - PLAYER_RADIUS
+
+    x = max(min_x, min(x, max_x))
+    y = max(min_y, min(y, max_y))
+    return x, y
+
+
+#============= Delta Time ==================================
+def delta_time():
+    global last_time
+    current_time = time.time()
+    dt = current_time - last_time
+    last_time = current_time
+    return dt
 
 def keyboardListener(key, x, y):
-   ...
+    global key_buffer
 
+    if key == b'w':
+         key_buffer['up'] = True
+    if key == b's':
+        key_buffer['down'] = True
+    if key == b'a':
+        key_buffer['left'] = True
+    if key == b'd':
+        key_buffer['right'] = True
 
+def keyboardUpListener(key, x, y):
+    if key == b'w':
+         key_buffer['up'] = False
+    if key == b's':
+        key_buffer['down'] = False
+    if key == b'a':
+        key_buffer['left'] = False
+    if key == b'd':
+        key_buffer['right'] = False
 
 
 def specialKeyListener(key, x, y):
@@ -312,25 +425,6 @@ def specialKeyListener(key, x, y):
         y = radius * math.cos(theta_rad)
         camera_pos = (x + player_pos[0], y + player_pos[1], z+player_pos[2])
 
-    # moving camera left (LEFT arrow key)
-    if key == GLUT_KEY_LEFT:
-        CAMERA_THETA += CAMERA_SPEED
-        # Convert angle to radians and calculate new position
-        theta_rad = math.radians(CAMERA_THETA)
-        x = radius * math.sin(theta_rad)
-        y = radius * math.cos(theta_rad)
-        camera_pos = (x + player_pos[0], y + player_pos[1], z)
-
-    # moving camera right (RIGHT arrow key)
-    if key == GLUT_KEY_RIGHT:
-        CAMERA_THETA -= CAMERA_SPEED
-        # Convert angle to radians and calculate new position
-        theta_rad = math.radians(CAMERA_THETA)
-        x = radius * math.sin(theta_rad)
-        y = radius * math.cos(theta_rad)
-        camera_pos = (x + player_pos[0], y + player_pos[1], z)
-    camera_pos = (x + player_pos[0], y + player_pos[1], z)
-
 
 def mouseListener(button, state, x, y):
     ...
@@ -355,15 +449,6 @@ def setupCamera():
     gluLookAt(x, y, z,  # Camera position
               a, b, c,  # Look-at target
               0, 0, 1)  # Up vector (z-axis)
-
-
-def idle():
-    """
-    Idle function that runs continuously:
-    - Triggers screen redraw for real-time updates.
-    """
-    # Ensure the screen updates with the latest changes
-    glutPostRedisplay()
     
 def draw_tiles():
     
@@ -419,6 +504,7 @@ def draw_tiles():
                 glColor3f(*BROWN) 
             glutSolidCube(TILE_SIZE * 0.8)
             glPopMatrix()
+
 def draw_walls():
     # it's brokem right now
     wall_cords = {
@@ -468,6 +554,19 @@ def draw_ground():
     glVertex3f(0, GRID_LENGTH, 0)
     glEnd()
 
+
+
+def idle():
+    """
+    Idle function that runs continuously:
+    - Triggers screen redraw for real-time updates.
+    """
+    # Ensure the screen updates with the latest changes
+    dt = delta_time()
+    PlayerMovement(dt)
+
+
+    glutPostRedisplay()
 
 def showScreen():
     """
@@ -525,6 +624,7 @@ def main():
     glutDisplayFunc(showScreen)  # Register display function
     glutKeyboardFunc(keyboardListener)  # Register keyboard listener
     glutSpecialFunc(specialKeyListener)
+    glutKeyboardUpFunc(keyboardUpListener)
     glutMouseFunc(mouseListener)
     glutIdleFunc(idle)  # Register the idle function to move the bullet automatically
 
