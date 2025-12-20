@@ -164,34 +164,7 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glMatrixMode(GL_MODELVIEW)
 
 
-def draw_shapes():
 
-    glPushMatrix()  # Save the current matrix state
-    glColor3f(0, 0, 1)
-    glTranslatef(0, 0, 0)  
-    glutSolidCube(60) # Take cube size as the parameter
-    glTranslatef(0, 0, 100) 
-    glColor3f(0, 1, 0)
-    glutSolidCube(60) 
-
-    glColor3f(1, 1, 0)
-    glScalef(2, 2, 2)
-    gluCylinder(gluNewQuadric(), 40, 5, 150, 20, 1)  # parameters are: quadric, base radius, top radius, height, slices, stacks
-    # glTranslatef(100, 0, 100) 
-    glRotatef(90, 0, 1, 0)  # parameters are: angle, x, y, z
-    gluCylinder(gluNewQuadric(), 40, 5, 150, 10, 10)
-
-    glColor3f(0, 1, 1)
-    glTranslatef(300, 0, 100) 
-    gluSphere(gluNewQuadric(), 80, 10, 10)  # parameters are: quadric, radius, slices, stacks
-
-    glPopMatrix()  # Restore the previous matrix state
-    
-    glPushMatrix()
-    glColor3f(1, 0, 0)
-    glTranslatef(GRID_LENGTH - 300, GRID_LENGTH, 0)
-    glutSolidCube(60)
-    glPopMatrix()
 
 
 def keyboardListener(key, x, y):
@@ -407,7 +380,6 @@ def showScreen():
     draw_text(10, 770, f"A Random Fixed Position Text")
     draw_text(10, 740, f"See how the position and variable change?: {rand_var}")
 
-    draw_shapes()
 
     # Swap buffers for smooth rendering (double buffering)
     glutSwapBuffers()
