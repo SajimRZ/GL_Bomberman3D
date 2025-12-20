@@ -55,7 +55,7 @@ GRID_START_Y = -GRID_LENGTH
 player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
 
 # Camera-related variables - behind player
-camera_pos = [player_pos[0], player_pos[1] + 1500, player_pos[2] + 1500]
+camera_pos = [player_pos[0], player_pos[1] + 1000, player_pos[2] + 500]
 CAMERA_SPEED = 5
 CAMERA_THETA = 0
 
@@ -172,22 +172,110 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glMatrixMode(GL_MODELVIEW)
 
 
-#=================== Player Model =========================
+
+
+#=================== Player Model ========================================
+
 def drawPlayer():
     glPushMatrix()
     glTranslatef(player_pos[0], player_pos[1], player_pos[2] + 75)  # Move to player position
+    glScalef(1.5,1.5,1.5)
     #feet
     glPushMatrix()
     glColor3f(*PINK)
-    glTranslatef(10,0,0)
+    glTranslatef(30,0,0)
     glutSolidSphere(20,20,20)
     glPopMatrix()
 
     glPushMatrix()
     glColor3f(*PINK)
-    glTranslatef(-10,0,0)
+    glTranslatef(-30,0,0)
     glutSolidSphere(20,20,20)
     glPopMatrix()
+    
+    #Legs
+    glPushMatrix()
+    glColor3f(*WHITE)
+    glTranslatef(30,0,20)
+    glScalef(1,1,2)
+    gluCylinder(gluNewQuadric(), 15, 15, 60, 10, 10)
+    glPopMatrix()
+
+    glPushMatrix()
+    glColor3f(*WHITE)
+    glTranslatef(-30,0,20)
+    glScalef(1,1,2)
+    gluCylinder(gluNewQuadric(), 15, 15, 60, 10, 10)
+    glPopMatrix()
+
+    #Body
+    glPushMatrix()
+    glColor3f(0.3, 0.3, 1)
+    glTranslatef(0,0,130)
+    glScalef(1.3,0.8,1.5)
+    gluSphere(gluNewQuadric(), 40, 10, 10)  # parameters are: quadric, radius, slices, stacks
+    glPopMatrix()
+
+    #Arms
+    glPushMatrix()
+    glColor3f(*SKIN)
+    glTranslatef(40,0,150)
+    glRotatef(45+90,0,1,0)
+    glScalef(1,1,1)
+    gluCylinder(gluNewQuadric(), 12, 8, 90, 10, 10)
+    glPopMatrix()
+
+    glPushMatrix()
+    glColor3f(*SKIN)
+    glTranslatef(-40,0,150)
+    glRotatef(-45-90,0,1,0)
+    glScalef(1,1,1)
+    gluCylinder(gluNewQuadric(), 12, 12, 90, 10, 10)
+    glPopMatrix()
+
+    #Hands
+    glPushMatrix()
+    glColor3f(*PINK)
+    glTranslatef(100,0,90)
+    gluSphere(gluNewQuadric(), 15, 10, 10)  # parameters are: quadric, radius, slices, stacks
+    glPopMatrix()
+
+    glPushMatrix()
+    glColor3f(*PINK)
+    glTranslatef(-100,0,90)
+    gluSphere(gluNewQuadric(), 15, 10, 10)  # parameters are: quadric, radius, slices, stacks
+    glPopMatrix()
+
+    #Head
+    glPushMatrix()
+    glColor3f(*WHITE)
+    glTranslatef(0,0,220)
+    glScalef(1.5,1,1.5)
+    gluSphere(gluNewQuadric(), 30, 10, 10)  # parameters are: quadric, radius, slices, stacks
+    glPopMatrix()
+
+    glPushMatrix()
+    glColor3f(*SKIN)
+    glTranslatef(0,8,220)
+    glScalef(1.2,1,1)
+    gluSphere(gluNewQuadric(), 30, 10, 10)  # parameters are: quadric, radius, slices, stacks
+    glPopMatrix()
+
+    #head thing
+    glPushMatrix()
+    glColor3f(*DEEP_GREEN)
+    glTranslatef(0,0,250)
+    glRotatef(45,1,0,0)
+    gluCylinder(gluNewQuadric(), 5, 5, 40, 10, 10)
+    glPopMatrix()
+
+    glPushMatrix()
+    glColor3f(*YELLOW)
+    glTranslatef(0,-30,280)
+    gluSphere(gluNewQuadric(), 15, 10, 10)  # parameters are: quadric, radius, slices, stacks
+    glPopMatrix()
+
+
     glPopMatrix()
 
 
@@ -195,45 +283,53 @@ def keyboardListener(key, x, y):
    ...
 
 
+
+
 def specialKeyListener(key, x, y):
     """
     Handles special key inputs (arrow keys) for adjusting the camera angle and height.
     """
-    global camera_pos, CAMERA_THETA, CAMERA_SPEED
+    global camera_pos, CAMERA_THETA, CAMERA_SPEED, player_pos
     x, y, z = camera_pos
+    
+    #calculate radius from player to camera
+    dx = x - player_pos[0]
+    dy = y - player_pos[1]
+    radius = math.sqrt(dx*dx + dy*dy)
+
     # Move camera up (UP arrow key)
     if key == GLUT_KEY_UP:
         z += CAMERA_SPEED * 10  # Small angle decrement for smooth movement
-        camera_pos = (x, y, z)
+        theta_rad = math.radians(CAMERA_THETA)
+        x = radius * math.sin(theta_rad)
+        y = radius * math.cos(theta_rad)
+        camera_pos = (x + player_pos[0], y + player_pos[1], z+player_pos[2])
     # # Move camera down (DOWN arrow key)
     if key == GLUT_KEY_DOWN:
         z -= CAMERA_SPEED * 10  # Small angle decrement for smooth movement
-        camera_pos = (x, y, z)
+        theta_rad = math.radians(CAMERA_THETA)
+        x = radius * math.sin(theta_rad)
+        y = radius * math.cos(theta_rad)
+        camera_pos = (x + player_pos[0], y + player_pos[1], z+player_pos[2])
 
     # moving camera left (LEFT arrow key)
     if key == GLUT_KEY_LEFT:
         CAMERA_THETA += CAMERA_SPEED
-        # Calculate radius from current position
-        radius = math.sqrt(x*x + y*y)
         # Convert angle to radians and calculate new position
         theta_rad = math.radians(CAMERA_THETA)
         x = radius * math.sin(theta_rad)
         y = radius * math.cos(theta_rad)
-        
-        camera_pos = (x, y, z)
-        
+        camera_pos = (x + player_pos[0], y + player_pos[1], z)
 
     # moving camera right (RIGHT arrow key)
     if key == GLUT_KEY_RIGHT:
         CAMERA_THETA -= CAMERA_SPEED
-        # Calculate radius from current position
-        radius = math.sqrt(x*x + y*y)
         # Convert angle to radians and calculate new position
         theta_rad = math.radians(CAMERA_THETA)
         x = radius * math.sin(theta_rad)
         y = radius * math.cos(theta_rad)
-        camera_pos = (x, y, z)
-    camera_pos = (x, y, z)
+        camera_pos = (x + player_pos[0], y + player_pos[1], z)
+    camera_pos = (x + player_pos[0], y + player_pos[1], z)
 
 
 def mouseListener(button, state, x, y):
@@ -394,7 +490,7 @@ def showScreen():
     # glVertex3f(-GRID_LENGTH, GRID_LENGTH, 0)
     # glEnd()
     
-    draw_ground()
+    #draw_ground()
     
     # Draw the walls (uncomment when you're ready to see them)
     draw_tiles()
