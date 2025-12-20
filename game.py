@@ -59,6 +59,7 @@ GRID_START_Y = -GRID_LENGTH
 player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
 PLAYER_ANGLE = 0
 PLAYER_SPEED = 10
+PLAYER_RADIUS = 60
 
 # Camera-related variables - behind player
 camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
@@ -306,15 +307,23 @@ def PlayerMovement(dt):
     dx = cx - px
     dy = cy - py
     radius = math.sqrt(dx*dx + dy*dy)
+    nx, ny = 0, 0
 
     if key_buffer['up']:
-        px += pspeed * math.sin(math.radians(PLAYER_ANGLE))
-        py += pspeed * math.cos(math.radians(PLAYER_ANGLE))
+        nx += pspeed * math.sin(math.radians(PLAYER_ANGLE))
+        ny += pspeed * math.cos(math.radians(PLAYER_ANGLE))
 
     if key_buffer['down']:
-        px -= pspeed * math.sin(math.radians(PLAYER_ANGLE))
-        py -= pspeed * math.cos(math.radians(PLAYER_ANGLE))
+        nx -= pspeed * math.sin(math.radians(PLAYER_ANGLE))
+        ny -= pspeed * math.cos(math.radians(PLAYER_ANGLE))
+    
+    #check if next step hits a wall
+    if not collides_with_wall(px+nx, py+ny):
+        px += nx
+        py += ny
 
+    #check if current position is outside and clamp it
+    px, py = clamp_to_map(px, py)
         
     if key_buffer['left']:
         CAMERA_THETA -= CAMERA_SPEED * rot_speed * dt
@@ -330,6 +339,32 @@ def PlayerMovement(dt):
     player_pos = [px, py, pz]
     camera_pos = [cx, cy, cz]
     target_pos = [px, py, pz]
+
+#==============  Collosion Detection ===========================
+def collides_with_wall(x, y):
+    global PLAYER_RADIUS
+    offsets = [
+        ( PLAYER_RADIUS, 0),
+        (-PLAYER_RADIUS, 0),
+        (0,  PLAYER_RADIUS),
+        (0, -PLAYER_RADIUS),
+    ]
+
+    for ox, oy in offsets:
+        tile = get_tile_type(x + ox, y + oy)
+        if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL):
+            return True
+    return False
+def clamp_to_map(x, y):
+    global PLAYER_RADIUS
+    min_x = -GRID_LENGTH + PLAYER_RADIUS
+    max_x =  GRID_LENGTH - PLAYER_RADIUS
+    min_y = -GRID_LENGTH + PLAYER_RADIUS
+    max_y =  GRID_LENGTH - PLAYER_RADIUS
+
+    x = max(min_x, min(x, max_x))
+    y = max(min_y, min(y, max_y))
+    return x, y
 
 
 #============= Delta Time ==================================
