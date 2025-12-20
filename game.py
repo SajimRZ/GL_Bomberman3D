@@ -59,7 +59,7 @@ GRID_START_Y = -GRID_LENGTH
 player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
 PLAYER_ANGLE = 0
 PLAYER_SPEED = 10
-PLAYER_RADIUS = 60
+PLAYER_RADIUS = 100
 
 # Camera-related variables - behind player
 camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
@@ -318,8 +318,9 @@ def PlayerMovement(dt):
         ny -= pspeed * math.cos(math.radians(PLAYER_ANGLE))
     
     #check if next step hits a wall
-    if not collides_with_wall(px+nx, py+ny):
+    if not collides_with_wall(px+nx, py):
         px += nx
+    if not collides_with_wall(px, py+ny):
         py += ny
 
     #check if current position is outside and clamp it
@@ -343,17 +344,35 @@ def PlayerMovement(dt):
 #==============  Collosion Detection ===========================
 def collides_with_wall(x, y):
     global PLAYER_RADIUS
-    offsets = [
-        ( PLAYER_RADIUS, 0),
-        (-PLAYER_RADIUS, 0),
-        (0,  PLAYER_RADIUS),
-        (0, -PLAYER_RADIUS),
-    ]
 
-    for ox, oy in offsets:
-        tile = get_tile_type(x + ox, y + oy)
-        if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL):
-            return True
+    row, col = world_to_grid(x, y)
+
+    wall_half = TILE_SIZE / 2
+
+    # Check nearby tiles only
+    for r in range(row - 1, row + 2):
+        for c in range(col - 1, col + 2):
+            if 0 <= r < GRID_ROWS and 0 <= c < GRID_COLS:
+                if game_map[r][c] in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL):
+
+                    wx, wy = grid_to_world(r, c)
+
+                    # Wall BBOX
+                    minx = wx - wall_half
+                    maxx = wx + wall_half
+                    miny = wy - wall_half
+                    maxy = wy + wall_half
+
+                    # Closest point on wall to player center
+                    closest_x = max(minx, min(x, maxx))
+                    closest_y = max(miny, min(y, maxy))
+
+                    dx = x - closest_x
+                    dy = y - closest_y
+
+                    if (dx * dx + dy * dy) <= (PLAYER_RADIUS * PLAYER_RADIUS):
+                        return True
+
     return False
 def clamp_to_map(x, y):
     global PLAYER_RADIUS
@@ -413,14 +432,14 @@ def specialKeyListener(key, x, y):
     # Move camera up (UP arrow key)
     if key == GLUT_KEY_UP:
         z += CAMERA_SPEED * 10  # Small angle decrement for smooth movement
-        theta_rad = math.radians(CAMERA_THETA)
+        theta_rad = math.radians(CAMERA_THETA+180)
         x = radius * math.sin(theta_rad)
         y = radius * math.cos(theta_rad)
         camera_pos = (x + player_pos[0], y + player_pos[1], z+player_pos[2])
     # # Move camera down (DOWN arrow key)
     if key == GLUT_KEY_DOWN:
         z -= CAMERA_SPEED * 10  # Small angle decrement for smooth movement
-        theta_rad = math.radians(CAMERA_THETA)
+        theta_rad = math.radians(CAMERA_THETA+180)
         x = radius * math.sin(theta_rad)
         y = radius * math.cos(theta_rad)
         camera_pos = (x + player_pos[0], y + player_pos[1], z+player_pos[2])
