@@ -50,13 +50,15 @@ DESTRUCTIBLE_WALL = 2
 
 #grid info
 TILE_SIZE = 500  # 500 because it divies 5000 evenly, change tile size if grid changes.
-GRID_ROWS = int((2 * GRID_LENGTH) / TILE_SIZE) 
-GRID_COLS = int((2 * GRID_LENGTH) / TILE_SIZE)  
-GRID_START_X = GRID_LENGTH
-GRID_START_Y = -GRID_LENGTH
+GRID_ROWS = int((2 * GRID_LENGTH) / TILE_SIZE)  + 1
+GRID_COLS = int((2 * GRID_LENGTH) / TILE_SIZE)  + 1
+
+GRID_START_X = GRID_LENGTH - (TILE_SIZE / 2)   # starting from middle of the tile
+GRID_START_Y = -GRID_LENGTH + (TILE_SIZE / 2)  
 
 #Player info
-player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
+# player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
+player_pos = [GRID_START_X - TILE_SIZE, GRID_START_Y + TILE_SIZE, 0]
 PLAYER_ANGLE = 0
 PLAYER_SPEED = 10
 PLAYER_RADIUS = 100
@@ -88,7 +90,16 @@ def initialize_game_map():
         for col in range(GRID_COLS):
             game_map[row][col] = EMPTY # everything empty first
     
-    for row in range(2, GRID_ROWS - 1, 2):  #placing default walls
+    # Place indestructible walls on the OUTER BORDER (row 0, row 19, col 0, col 19)
+    for row in range(GRID_ROWS):
+        game_map[row][0] = INDESTRUCTIBLE_WALL              # Left edge
+        game_map[row][GRID_COLS - 1] = INDESTRUCTIBLE_WALL  # Right edge
+    for col in range(GRID_COLS):
+        game_map[0][col] = INDESTRUCTIBLE_WALL              # Top edge
+        game_map[GRID_ROWS - 1][col] = INDESTRUCTIBLE_WALL  # Bottom edge
+    
+    # Place inner indestructible walls in grid pattern
+    for row in range(2, GRID_ROWS - 1, 2):
         for col in range(2, GRID_COLS - 1, 2):  
             game_map[row][col] = INDESTRUCTIBLE_WALL
     
@@ -116,13 +127,12 @@ def initialize_game_map():
 
 def grid_to_world(grid_row, grid_col):
 
-    world_x = GRID_START_X - (grid_col * TILE_SIZE)  # X decreases as col increases
-    world_y = GRID_START_Y + (grid_row * TILE_SIZE)  # Y increases as row increases
+    world_x = GRID_START_X - (grid_col * TILE_SIZE) # X decreases as col increases
+    world_y = GRID_START_Y + (grid_row * TILE_SIZE) # Y increases as row increases
     return world_x, world_y
 
 
 def world_to_grid(world_x, world_y):
-
     grid_col = int((GRID_START_X - world_x) / TILE_SIZE)
     grid_row = int((world_y - GRID_START_Y) / TILE_SIZE)
     return grid_row, grid_col
@@ -145,7 +155,15 @@ def get_tile_type(world_x, world_y):
 def print_game_map():
 
     print("\n=== GAME MAP ===")
-    print("Top-left is (0,0), Bottom-right is ({},{})".format(GRID_ROWS-1, GRID_COLS-1))
+    # print(f"Grid size: {GRID_ROWS}x{GRID_COLS}")
+    # print(f"GRID_START: ({GRID_START_X}, {GRID_START_Y})")
+    # print(f"Tile (0,0) at world: {grid_to_world(0, 0)}")
+    # print(f"Tile (0,{GRID_COLS-1}) at world: {grid_to_world(0, GRID_COLS-1)}")
+    # print(f"Tile ({GRID_ROWS-1},0) at world: {grid_to_world(GRID_ROWS-1, 0)}")
+    # print(f"Tile ({GRID_ROWS-1},{GRID_COLS-1}) at world: {grid_to_world(GRID_ROWS-1, GRID_COLS-1)}")
+    # print(f"Boundary walls at: ±{GRID_LENGTH}")
+    # print(f"Edge tile coverage: {GRID_START_X - TILE_SIZE/2} to {GRID_START_X + TILE_SIZE/2}")
+    # print()
     for row in range(GRID_ROWS):
         line = ""
         for col in range(GRID_COLS):
@@ -608,7 +626,7 @@ def showScreen():
     # glVertex3f(-GRID_LENGTH, GRID_LENGTH, 0)
     # glEnd()
     
-    #draw_ground()
+    draw_ground()
     
     # Draw the walls (uncomment when you're ready to see them)
     draw_tiles()
@@ -621,6 +639,7 @@ def showScreen():
     # Display game info text at a fixed screen position
     draw_text(10, 770, f"A Random Fixed Position Text")
     draw_text(10, 740, f"See how the position and variable change?: {rand_var}")
+    draw_text(10, 710, f"Player Position: {player_pos}")
 
 
     # Swap buffers for smooth rendering (double buffering)
