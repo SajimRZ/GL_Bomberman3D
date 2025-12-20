@@ -26,17 +26,13 @@ LEAD = (0.25, 0.25, 0.25)
 TIN = (0.5, 0.5, 0.5)
 DEEP_GREEN = (0, 0.5, 0)
 SKIN = (1.0, 0.84, 0.53)
+PINK = (1.0, 0.75, 0.8)
+BROWN = (0.6, 0.4, 0.2)
 
 
 #Screen
 SCREEN_WIDTH = 1630
 SCREEN_HEIGHT = 955
-
-# Camera-related variables
-camera_pos = (0,1300,2500)
-CAMERA_SPEED = 5
-CAMERA_THETA = 0
-
 
 
 fovY = 90  # Field of view
@@ -54,6 +50,18 @@ GRID_ROWS = int((2 * GRID_LENGTH) / TILE_SIZE)
 GRID_COLS = int((2 * GRID_LENGTH) / TILE_SIZE)  
 GRID_START_X = GRID_LENGTH
 GRID_START_Y = -GRID_LENGTH
+
+#Player info
+player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
+
+# Camera-related variables - behind player
+camera_pos = [player_pos[0], player_pos[1] + 1500, player_pos[2] + 1500]
+CAMERA_SPEED = 5
+CAMERA_THETA = 0
+
+target_pos = [player_pos[0], player_pos[1], player_pos[2]]
+
+
 
 #map info
 game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
@@ -164,7 +172,23 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glMatrixMode(GL_MODELVIEW)
 
 
+#=================== Player Model =========================
+def drawPlayer():
+    glPushMatrix()
+    glTranslatef(player_pos[0], player_pos[1], player_pos[2] + 75)  # Move to player position
+    #feet
+    glPushMatrix()
+    glColor3f(*PINK)
+    glTranslatef(10,0,0)
+    glutSolidSphere(20,20,20)
+    glPopMatrix()
 
+    glPushMatrix()
+    glColor3f(*PINK)
+    glTranslatef(-10,0,0)
+    glutSolidSphere(20,20,20)
+    glPopMatrix()
+    glPopMatrix()
 
 
 def keyboardListener(key, x, y):
@@ -230,9 +254,10 @@ def setupCamera():
 
     # Extract camera position and look-at target
     x, y, z = camera_pos
+    a, b, c = target_pos
     # Position the camera and set its orientation
     gluLookAt(x, y, z,  # Camera position
-              0, 0, 0,  # Look-at target
+              a, b, c,  # Look-at target
               0, 0, 1)  # Up vector (z-axis)
 
 
@@ -373,6 +398,9 @@ def showScreen():
     
     # Draw the walls (uncomment when you're ready to see them)
     draw_tiles()
+
+    #Draw the player
+    drawPlayer()
 
 
 
