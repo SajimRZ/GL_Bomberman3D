@@ -63,7 +63,7 @@ PLAYER_ANGLE = 0
 PLAYER_SPEED = 10
 PLAYER_RADIUS = 100
 
-player_two_pos = [-(GRID_START_X - TILE_SIZE), -(GRID_START_Y + TILE_SIZE), 0]
+player_two_pos = [ -GRID_START_X, -GRID_START_Y , 0]
 player_two_angle = 180
 
 #Player stats
@@ -87,14 +87,19 @@ key_buffer = {
     'up': False,
     'down': False,
     'left': False,
-    'right': False
+    'right': False,
+
+    'up2': False,
+    'down2': False,
+    'left2': False,
+    'right2': False,
 }
 
 
 
 #map info
 game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
-GAME_MODE = 0 # 0: Wave Survival, 1: Endless, 2: Multiplayer
+GAME_MODE = 2 # 0: Wave Survival, 1: Endless, 2: Multiplayer
 
 
 def initialize_game_map():
@@ -426,27 +431,43 @@ def PlayerMovementThirdPerson(dt):
     camera_pos = [cx, cy, cz]
     target_pos = [px, py, pz]
 
-def PlayerMovementTopDown(dt):
+def PlayerMovementTopDown(dt, px, py, pz, num=1):
     global key_buffer,player_pos, camera_pos,PLAYER_ANGLE,PLAYER_SPEED, CAMERA_THETA, target_pos
+    global player_two_pos, player_two_angle
     
     pspeed = PLAYER_SPEED* 200 * dt
-    px, py, pz = player_pos
-
     nx, ny = 0, 0
 
-    if key_buffer['up']:
-        PLAYER_ANGLE = 0
-        ny += pspeed
+    if num == 1:
+        if key_buffer['up']:
+            PLAYER_ANGLE = 0
+            ny += pspeed
 
-    if key_buffer['down']:
-        PLAYER_ANGLE = 180
-        ny -= pspeed
-    if key_buffer['left']:
-        PLAYER_ANGLE = 270
-        nx -= pspeed
-    if key_buffer['right']:
-        PLAYER_ANGLE = 90
-        nx += pspeed
+        if key_buffer['down']:
+            PLAYER_ANGLE = 180
+            ny -= pspeed
+        if key_buffer['left']:
+            PLAYER_ANGLE = 270
+            nx -= pspeed
+        if key_buffer['right']:
+            PLAYER_ANGLE = 90
+            nx += pspeed
+
+    elif num == 2 and GAME_MODE == 2:
+        if key_buffer['up2']:
+            player_two_angle = 0
+            ny += pspeed
+
+        if key_buffer['down2']:
+            player_two_angle = 180
+            ny -= pspeed
+        if key_buffer['left2']:
+            player_two_angle = 270
+            nx -= pspeed
+        if key_buffer['right2']:
+            player_two_angle = 90
+            nx += pspeed
+    
     
     #check if next step hits a wall
     if not collides_with_wall(px+nx, py):
@@ -456,8 +477,11 @@ def PlayerMovementTopDown(dt):
 
     #check if current position is outside and clamp it
     px, py = clamp_to_map(px, py)
-        
-    player_pos = [px, py, pz]
+    
+    if num == 1:
+        player_pos = [px, py, pz]
+    elif num == 2:
+        player_two_pos = [px, py, pz]
     #center of grid
     target_pos = [0, 500, 0]
     camera_pos = [0, 500, 6500]
@@ -553,30 +577,47 @@ def specialKeyListener(key, x, y):
     dx = x - px
     dy = y - py
     radius = math.sqrt(dx*dx + dy*dy)
-    
+    if GAME_MODE != 2:
+        if key == GLUT_KEY_LEFT:
+            CAMERA_THETA -= 12
+            final_angle = PLAYER_ANGLE + CAMERA_THETA
+
+            theta_rad = math.radians(final_angle + 180)
+
+            x = px + radius * math.sin(theta_rad)
+            y = py + radius * math.cos(theta_rad)
+
+            camera_pos = [x, y, z]
+            
+        if key == GLUT_KEY_RIGHT:
+            CAMERA_THETA += 12
+            final_angle = PLAYER_ANGLE + CAMERA_THETA
+
+            theta_rad = math.radians(final_angle + 180)
+
+            x = px + radius * math.sin(theta_rad)
+            y = py + radius * math.cos(theta_rad)
+
+            camera_pos = [x, y, z]
+    else:
+        if key == GLUT_KEY_LEFT:
+            key_buffer['left2'] = True
+        if key == GLUT_KEY_RIGHT:
+            key_buffer['right2'] = True
+        if key == GLUT_KEY_UP:
+            key_buffer['up2'] = True
+        if key == GLUT_KEY_DOWN:
+            key_buffer['down2'] = True
+        
+def SpecialKeyUpListener(key, x, y):
     if key == GLUT_KEY_LEFT:
-        CAMERA_THETA -= 12
-        final_angle = PLAYER_ANGLE + CAMERA_THETA
-
-        theta_rad = math.radians(final_angle + 180)
-
-        x = px + radius * math.sin(theta_rad)
-        y = py + radius * math.cos(theta_rad)
-
-        camera_pos = [x, y, z]
-        
+        key_buffer['left2'] = False
     if key == GLUT_KEY_RIGHT:
-        CAMERA_THETA += 12
-        final_angle = PLAYER_ANGLE + CAMERA_THETA
-
-        theta_rad = math.radians(final_angle + 180)
-
-        x = px + radius * math.sin(theta_rad)
-        y = py + radius * math.cos(theta_rad)
-
-        camera_pos = [x, y, z]
-        
-
+        key_buffer['right2'] = False
+    if key == GLUT_KEY_UP:
+        key_buffer['up2'] = False
+    if key == GLUT_KEY_DOWN:
+        key_buffer['down2'] = False
 
 def mouseListener(button, state, x, y):
     ...
@@ -741,10 +782,11 @@ def idle():
         if POV == 0:
             PlayerMovementThirdPerson(dt)
         elif POV == 1:
-            PlayerMovementTopDown(dt)
+            PlayerMovementTopDown(dt, player_pos[0], player_pos[1], player_pos[2], 1)
     elif GAME_MODE == 2:
         POV = 1
-        PlayerMovementTopDown(dt)
+        PlayerMovementTopDown(dt, player_pos[0], player_pos[1], player_pos[2], 1)
+        PlayerMovementTopDown(dt, player_two_pos[0], player_two_pos[1], player_two_pos[2], 2)
 
 
     glutPostRedisplay()
@@ -771,6 +813,8 @@ def showScreen():
 
     #Draw the player
     drawPlayer(1)
+    if GAME_MODE == 2:
+        drawPlayer(2)
     #drawBomb(GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0, )
 
 
@@ -802,6 +846,7 @@ def main():
     glutKeyboardFunc(keyboardListener)  # Register keyboard listener
     glutSpecialFunc(specialKeyListener)
     glutKeyboardUpFunc(keyboardUpListener)
+    glutSpecialUpFunc(SpecialKeyUpListener)
     glutMouseFunc(mouseListener)
     glutIdleFunc(idle)  # Register the idle function to move the bullet automatically
 
