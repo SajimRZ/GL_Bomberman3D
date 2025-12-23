@@ -99,7 +99,7 @@ key_buffer = {
 
 #map info
 game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
-GAME_MODE = 2 # 0: Wave Survival, 1: Endless, 2: Multiplayer
+GAME_MODE = 0 # 0: Wave Survival, 1: Endless, 2: Multiplayer
 
 
 def initialize_game_map():
@@ -578,27 +578,28 @@ def specialKeyListener(key, x, y):
     dy = y - py
     radius = math.sqrt(dx*dx + dy*dy)
     if GAME_MODE != 2:
-        if key == GLUT_KEY_LEFT:
-            CAMERA_THETA -= 12
-            final_angle = PLAYER_ANGLE + CAMERA_THETA
+        if POV == 0:
+            if key == GLUT_KEY_LEFT:
+                CAMERA_THETA -= 12
+                final_angle = PLAYER_ANGLE + CAMERA_THETA
 
-            theta_rad = math.radians(final_angle + 180)
+                theta_rad = math.radians(final_angle + 180)
 
-            x = px + radius * math.sin(theta_rad)
-            y = py + radius * math.cos(theta_rad)
+                x = px + radius * math.sin(theta_rad)
+                y = py + radius * math.cos(theta_rad)
 
-            camera_pos = [x, y, z]
-            
-        if key == GLUT_KEY_RIGHT:
-            CAMERA_THETA += 12
-            final_angle = PLAYER_ANGLE + CAMERA_THETA
+                camera_pos = [x, y, z]
+                
+            if key == GLUT_KEY_RIGHT:
+                CAMERA_THETA += 12
+                final_angle = PLAYER_ANGLE + CAMERA_THETA
 
-            theta_rad = math.radians(final_angle + 180)
+                theta_rad = math.radians(final_angle + 180)
 
-            x = px + radius * math.sin(theta_rad)
-            y = py + radius * math.cos(theta_rad)
+                x = px + radius * math.sin(theta_rad)
+                y = py + radius * math.cos(theta_rad)
 
-            camera_pos = [x, y, z]
+                camera_pos = [x, y, z]
     else:
         if key == GLUT_KEY_LEFT:
             key_buffer['left2'] = True
@@ -608,7 +609,8 @@ def specialKeyListener(key, x, y):
             key_buffer['up2'] = True
         if key == GLUT_KEY_DOWN:
             key_buffer['down2'] = True
-        
+
+
 def SpecialKeyUpListener(key, x, y):
     if key == GLUT_KEY_LEFT:
         key_buffer['left2'] = False
@@ -845,8 +847,10 @@ def main():
     glutDisplayFunc(showScreen)  # Register display function
     glutKeyboardFunc(keyboardListener)  # Register keyboard listener
     glutSpecialFunc(specialKeyListener)
+    
     glutKeyboardUpFunc(keyboardUpListener)
     glutSpecialUpFunc(SpecialKeyUpListener)
+    
     glutMouseFunc(mouseListener)
     glutIdleFunc(idle)  # Register the idle function to move the bullet automatically
 
