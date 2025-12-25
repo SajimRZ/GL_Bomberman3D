@@ -70,8 +70,12 @@ CAMERA_SPEED = 5
 CAMERA_THETA = 0
 POV = 0  # 0: Third-person, 1: Top-down
 
-
-
+#
+#bomb info
+PULSE_RATE = 5
+EXPLOTION_TIME = 3
+EXPLOTION_RADIUS = 3 # in tiles
+NUMBER_OF_BOMBS = 1
 
 target_pos = [player_pos[0], player_pos[1], player_pos[2]]
 
@@ -324,7 +328,7 @@ def drawPlayer():
 def drawBomb(x, y, z):
     glPushMatrix()
     glTranslatef(x, y, z)
-    glScalef(math.sin(time.time()*5)*0.1 + 1, math.sin(time.time()*5)*0.1 + 1, math.sin(time.time()*5)*0.1 + 1)
+    glScalef(math.sin(time.time()*PULSE_RATE)*0.1 + 1, math.sin(time.time()*PULSE_RATE)*0.1 + 1, math.sin(time.time()*PULSE_RATE)*0.1 + 1)
     
     glPushMatrix()
     #glColor3f(0.5, 0.4, 1)
@@ -530,7 +534,7 @@ def keyboardListener(key, x, y):
 
             if tile_type == EMPTY:
                 game_map[grid_row][grid_col] = BOMB
-                ALL_BOMBS.append([grid_row, grid_col, 3.0])
+                ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
                 print(f"✅ Bomb placed at grid ({grid_row}, {grid_col})")
             else:
                 print(f"❌ Cannot place bomb - tile occupied (type: {tile_type})")
