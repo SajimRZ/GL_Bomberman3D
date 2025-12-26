@@ -87,12 +87,7 @@ camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
 CAMERA_SPEED = 5
 CAMERA_THETA = 0
 
-#
-#bomb info
-PULSE_RATE = 5
-EXPLOTION_TIME = 3
-EXPLOTION_RADIUS = 3 # in tiles
-NUMBER_OF_BOMBS = 1
+
 
 target_pos = [player_pos[0], player_pos[1], player_pos[2]]
 
@@ -115,6 +110,10 @@ game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 
 #bomb info
 ALL_BOMBS = [] # list of all bombs, [x, y, time_to_explode], the x and y will follow game_map
+PULSE_RATE = 5
+EXPLOTION_TIME = 3
+EXPLOTION_RADIUS = 3 # in tiles
+NUMBER_OF_BOMBS = 1
 
 
 def initialize_game_map():
@@ -210,6 +209,36 @@ def print_game_map():
                 line += "X "
         print(line)
     print("================\n")
+    
+def plantBomb(position, type = None):
+    px, py, pz = position
+    grid_row, grid_col = world_to_grid(px, py)
+
+    # Check bounds
+    if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
+        tile_type = game_map[grid_row][grid_col]
+        print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
+        print(f"(0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
+            
+
+        if tile_type == EMPTY:
+            game_map[grid_row][grid_col] = BOMB
+            ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
+            print(f"Bomb placed at grid ({grid_row}, {grid_col})")
+        else:
+            print(f"Cannot place bomb - tile occupied (type: {tile_type})")
+    else:
+        print(f"Out of bounds: ({grid_row}, {grid_col})")
+        print("===========================\n")
+        
+def checkAllBombs():
+    global ALL_BOMBS
+    time_now = time.time()
+    for i, bombs in enumerate(ALL_BOMBS):
+        x, y, explotion = bombs
+        game_map[x][y] = EMPTY
+        if time_now >= explotion:
+            ALL_BOMBS.pop(i)
 
 
 def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
@@ -600,47 +629,8 @@ def keyboardListener(key, x, y):
             POV = (POV + 1) % 2  # Toggle between 0 and 1
             
     if key == b' ':
-        px, py, pz = player_pos
-        grid_row, grid_col = world_to_grid(px, py)
-
-        # Check bounds
-        if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
-            tile_type = game_map[grid_row][grid_col]
-            print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
-            print(f"  (0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
+        plantBomb(player_pos)
             
-
-            if tile_type == EMPTY:
-                game_map[grid_row][grid_col] = BOMB
-                ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
-                print(f"✅ Bomb placed at grid ({grid_row}, {grid_col})")
-            else:
-                print(f"❌ Cannot place bomb - tile occupied (type: {tile_type})")
-        else:
-            print(f"❌ Out of bounds: ({grid_row}, {grid_col})")
-        print("===========================\n")
-
-    if key == b' ':
-        px, py, pz = player_pos
-        grid_row, grid_col = world_to_grid(px, py)
-
-        # Check bounds
-        if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
-            tile_type = game_map[grid_row][grid_col]
-            print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
-            print(f"  (0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
-                
-
-            if tile_type == EMPTY:
-                game_map[grid_row][grid_col] = BOMB
-                ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
-                print(f"✅ Bomb placed at grid ({grid_row}, {grid_col})")
-            else:
-                print(f"❌ Cannot place bomb - tile occupied (type: {tile_type})")
-        else:
-            print(f"❌ Out of bounds: ({grid_row}, {grid_col})")
-            print("===========================\n")
-
 # def keyboardUpListener(key, x, y):
 #     if key == b'w':
 #          key_buffer['up'] = False
@@ -650,6 +640,8 @@ def keyboardListener(key, x, y):
 #         key_buffer['left'] = False
 #     if key == b'd':
 #         key_buffer['right'] = False
+
+
 
 
 
@@ -845,6 +837,8 @@ def idle():
     dt = delta_time()
     if GAME_MODE == 2:
         POV = 1
+        
+    checkAllBombs()
 
 
     glutPostRedisplay()
