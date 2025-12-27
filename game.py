@@ -77,12 +77,8 @@ player_two_pos = [ -GRID_START_X, -GRID_START_Y , 0]
 player_two_angle = 180
 
 #Player stats
-max_health = 100
-current_health = max_health
-
-bomb_carry_limit = 2
-current_bombs = bomb_carry_limit
-
+MAX_HEALTH = 100
+CURRENT_HEALTH = MAX_HEALTH
 
 # Camera-related variables - behind player
 camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
@@ -114,12 +110,30 @@ game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 ALL_BOMBS = [] # list of all bombs, [x, y, time_to_explode], the x and y will follow game_map
 PULSE_RATE = 5
 EXPLOTION_TIME = 3
+
 DEFAULT_EXPLOTION_RADIUS = 1 # in tiles
-PLAYER_BOMB_EXPLOTION_RADIUS = DEFAULT_EXPLOTION_RADIUS
-NUMBER_OF_PLAYER_BOMBS = 2
+
+MAX_PLAYER_BOMB_EXPLOTION_RADIUS = DEFAULT_EXPLOTION_RADIUS
+PLAYER_BOMB_EXPLOTION_RADIUS = MAX_PLAYER_BOMB_EXPLOTION_RADIUS  #===Upgradable========
+
+MAX_NUMBER_OF_PLAYER_BOMBS = 2
+NUMBER_OF_PLAYER_BOMBS = MAX_NUMBER_OF_PLAYER_BOMBS  #===Upgradable========
+
 PLAYER_BOMB_INDEX = [] #index of the bombs in ALL_BOMBS
 PLAYER_BOMB_EXPLOTION_TIME = 1
 ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration]
+
+
+#Upgrade Screen info 
+show_upgrade_menu = False
+
+upgrade_options = {
+    "Bomb Number": NUMBER_OF_PLAYER_BOMBS,
+    "Explosion Radius": PLAYER_BOMB_EXPLOTION_RADIUS,
+    "Heal up": CURRENT_HEALTH,
+}
+cursor_pos = 0
+
 
 
 def initialize_game_map():
@@ -283,7 +297,7 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glLoadIdentity()
     
     # Set up an orthographic projection that matches window coordinates
-    gluOrtho2D(0, 1000, 0, 800)  # left, right, bottom, top
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)  # left, right, bottom, top
 
     
     glMatrixMode(GL_MODELVIEW)
@@ -429,6 +443,79 @@ def update_and_draw_explosions():
 #         glPopMatrix()
 #         time.sleep(0.01)
 
+
+#===================== Ortho Upgrade Menu ===============================
+def draw_upgrade_menu():
+    global upgrade_options, cursor_pos
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    panel_w = 600
+    panel_h = 400
+    panel_x = (SCREEN_WIDTH - panel_w) // 2
+    panel_y = (SCREEN_HEIGHT - panel_h) // 2
+
+    #Panel
+    glColor4f(0.3, 0.3, 0.3, 0.9)  # gray
+    glBegin(GL_QUADS)
+    glVertex2f(panel_x, panel_y)
+    glVertex2f(panel_x + panel_w, panel_y)
+    glVertex2f(panel_x + panel_w, panel_y + panel_h)
+    glVertex2f(panel_x, panel_y + panel_h)
+    glEnd()
+
+    glClear(GL_DEPTH_BUFFER_BIT)
+
+    #Title
+    draw_text(panel_x+180, panel_y + panel_h - 50, "Select an Upgrade")
+    
+    #Options
+    start_y = panel_y + panel_h - 120
+    for i, [option, value] in enumerate(upgrade_options.items()):
+        if i == cursor_pos: #where cursor currently is
+            glColor3f(1,1,0)
+            prefix  = "> "
+        else:
+            glColor3f(1,1,1)
+            prefix = "  "
+        
+        draw_text(panel_x+100, start_y - i * 40, f"{prefix}{option}: {value} + 1") #the option text
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+def slect_and_apply_upgrade():
+    # for upgrade system
+    global upgrade_options, cursor_pos
+
+    #bomb stats
+    global NUMBER_OF_PLAYER_BOMBS, PLAYER_BOMB_EXPLOTION_RADIUS
+
+    #player stats
+    global CURRENT_HEALTH
+
+    selected_option = list(upgrade_options.keys())[cursor_pos]
+
+    if selected_option == "Bomb Number":
+        NUMBER_OF_PLAYER_BOMBS += 1
+        upgrade_options[selected_option] = NUMBER_OF_PLAYER_BOMBS
+    if selected_option == "Explosion Radius":
+        PLAYER_BOMB_EXPLOTION_RADIUS += 1
+        upgrade_options[selected_option] = PLAYER_BOMB_EXPLOTION_RADIUS
+    if selected_option == "Heal up":
+        CURRENT_HEALTH += 20
+        if CURRENT_HEALTH > MAX_HEALTH:
+            CURRENT_HEALTH = MAX_HEALTH
+        upgrade_options[selected_option] = CURRENT_HEALTH
+        
 
 
 #=================== Player Model ========================================
@@ -755,6 +842,7 @@ def delta_time():
 
 def keyboardListener(key, x, y):
     global key_buffer,player_pos, camera_pos,PLAYER_ANGLE,PLAYER_SPEED, CAMERA_THETA, target_pos, POV, GAME_MODE
+    global show_upgrade_menu
 
     if key == b'w':
         if POV == 0:
@@ -798,7 +886,16 @@ def keyboardListener(key, x, y):
         
     if key == b'f':
         TriggerBomb()
+
+    if key == b'\r':  #enter
+        if show_upgrade_menu:
+            slect_and_apply_upgrade()
+            show_upgrade_menu = False
             
+    #temporary
+    if key == b'm':
+        show_upgrade_menu = not show_upgrade_menu
+
 # def keyboardUpListener(key, x, y):
 #     if key == b'w':
 #          key_buffer['up'] = False
@@ -818,44 +915,63 @@ def specialKeyListener(key, x, y):
     Handles special key inputs (arrow keys) for adjusting the camera angle and height.
     """
     global camera_pos, CAMERA_THETA, CAMERA_SPEED, player_pos
+    global upgrade_options, cursor_pos
+
     x, y, z = camera_pos
     px, py, pz = player_pos
     #calculate radius from player to camera
     dx = x - px
     dy = y - py
     radius = math.sqrt(dx*dx + dy*dy)
-    if GAME_MODE != 2:
-        if POV == 0:
+
+    if show_upgrade_menu == False:
+        if GAME_MODE != 2:
+
+            #Rotates only when player is in third person and Not in 2 player mode
+            if POV == 0:
+                if key == GLUT_KEY_LEFT: #left cam rotation
+                    CAMERA_THETA -= 12
+                    final_angle = PLAYER_ANGLE + CAMERA_THETA
+
+                    theta_rad = math.radians(final_angle + 180)
+
+                    theta_rad = math.radians(final_angle + 180)
+
+                    x = px + radius * math.sin(theta_rad)
+                    y = py + radius * math.cos(theta_rad)
+
+                    camera_pos = [x, y, z]
+                    
+                if key == GLUT_KEY_RIGHT: #right cam rotation
+                    CAMERA_THETA += 12
+                    final_angle = PLAYER_ANGLE + CAMERA_THETA
+
+                    theta_rad = math.radians(final_angle + 180)
+
+                    x = px + radius * math.sin(theta_rad)
+                    y = py + radius * math.cos(theta_rad)
+
+                    camera_pos = [x, y, z]
+        else:
+
+            #controls when in top Down for PLAYER 2 
+            #move up, down, left, right
             if key == GLUT_KEY_LEFT:
-                CAMERA_THETA -= 12
-                final_angle = PLAYER_ANGLE + CAMERA_THETA
-
-                theta_rad = math.radians(final_angle + 180)
-
-                x = px + radius * math.sin(theta_rad)
-                y = py + radius * math.cos(theta_rad)
-
-                camera_pos = [x, y, z]
-                
+                PlayerMovementTopDown(-PLAYER_SPEED, 0, 270, num=2)
             if key == GLUT_KEY_RIGHT:
-                CAMERA_THETA += 12
-                final_angle = PLAYER_ANGLE + CAMERA_THETA
-
-                theta_rad = math.radians(final_angle + 180)
-
-                x = px + radius * math.sin(theta_rad)
-                y = py + radius * math.cos(theta_rad)
-
-                camera_pos = [x, y, z]
+                PlayerMovementTopDown(PLAYER_SPEED, 0, 90, num=2)
+            if key == GLUT_KEY_UP:
+                PlayerMovementTopDown(0, PLAYER_SPEED, 0, num=2)
+            if key == GLUT_KEY_DOWN:
+                PlayerMovementTopDown(0, -PLAYER_SPEED, 180, num=2)
     else:
-        if key == GLUT_KEY_LEFT:
-            PlayerMovementTopDown(-PLAYER_SPEED, 0, 270, num=2)
-        if key == GLUT_KEY_RIGHT:
-            PlayerMovementTopDown(PLAYER_SPEED, 0, 90, num=2)
+
+        #Move the cursor in menues.
+        #up, down
         if key == GLUT_KEY_UP:
-            PlayerMovementTopDown(0, PLAYER_SPEED, 0, num=2)
+            cursor_pos = (cursor_pos - 1) % len(upgrade_options)
         if key == GLUT_KEY_DOWN:
-            PlayerMovementTopDown(0, -PLAYER_SPEED, 180, num=2)
+            cursor_pos = (cursor_pos + 1) % len(upgrade_options)
 
 
 # def SpecialKeyUpListener(key, x, y):
@@ -1039,17 +1155,10 @@ def showScreen():
     drawPlayer(1)
     if GAME_MODE == 2:
         drawPlayer(2)
-        
-    
     #drawBomb(GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0, )
 
-
-
-    # Display game info text at a fixed screen position
-    draw_text(10, 770, f"A Random Fixed Position Text")
-    draw_text(10, 740, f"See how the position and variable change?: {rand_var}")
-    draw_text(10, 710, f"Player Position: {player_pos}")
-
+    if show_upgrade_menu:
+        draw_upgrade_menu()
 
     # Swap buffers for smooth rendering (double buffering)
     glutSwapBuffers()
