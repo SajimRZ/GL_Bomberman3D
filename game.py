@@ -75,12 +75,8 @@ player_two_pos = [ -GRID_START_X, -GRID_START_Y , 0]
 player_two_angle = 180
 
 #Player stats
-max_health = 100
-current_health = max_health
-
-bomb_carry_limit = 2
-current_bombs = bomb_carry_limit
-
+MAX_HEALTH = 100
+CURRENT_HEALTH = MAX_HEALTH
 
 # Camera-related variables - behind player
 camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
@@ -91,8 +87,15 @@ CAMERA_THETA = 0
 #bomb info
 PULSE_RATE = 5
 EXPLOTION_TIME = 3
-EXPLOTION_RADIUS = 3 # in tiles
-NUMBER_OF_BOMBS = 1
+
+MAX_EXPLOSION_RADIUS = 3
+EXPLOTION_RADIUS = MAX_EXPLOSION_RADIUS # in tiles  === Upgradable =====
+
+MAX_NUMBER_OF_BOMBS = 1
+NUMBER_OF_BOMBS = MAX_NUMBER_OF_BOMBS  #=== Upgradable =====
+
+MAX_BOMB_DAMAGE = 10
+BOMB_DAMAGE = MAX_BOMB_DAMAGE  #=== Upgradable =====
 
 target_pos = [player_pos[0], player_pos[1], player_pos[2]]
 
@@ -115,6 +118,19 @@ game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 
 #bomb info
 ALL_BOMBS = [] # list of all bombs, [x, y, time_to_explode], the x and y will follow game_map
+
+
+#Upgrade Screen info 
+show_upgrade_menu = False
+
+upgrade_options = {
+    "Bomb Number": NUMBER_OF_BOMBS,
+    "Explosion Radius": EXPLOTION_RADIUS,
+    "Bomb Damage": BOMB_DAMAGE,
+    "Heal up": CURRENT_HEALTH,
+}
+cursor_pos = 0
+
 
 
 def initialize_game_map():
@@ -219,7 +235,7 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glLoadIdentity()
     
     # Set up an orthographic projection that matches window coordinates
-    gluOrtho2D(0, 1000, 0, 800)  # left, right, bottom, top
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)  # left, right, bottom, top
 
     
     glMatrixMode(GL_MODELVIEW)
@@ -237,6 +253,51 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
 
+#===================== Ortho Upgrade Menu ===============================
+def draw_upgrade_menu():
+    global upgrade_options, cursor_pos
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    panel_w = 600
+    panel_h = 400
+    panel_x = (SCREEN_WIDTH - panel_w) // 2
+    panel_y = (SCREEN_HEIGHT - panel_h) // 2
+
+    #Panel
+    glColor4f(0.3, 0.3, 0.3, 0.9)  # gray
+    glBegin(GL_QUADS)
+    glVertex2f(panel_x, panel_y)
+    glVertex2f(panel_x + panel_w, panel_y)
+    glVertex2f(panel_x + panel_w, panel_y + panel_h)
+    glVertex2f(panel_x, panel_y + panel_h)
+    glEnd()
+
+    #Title
+    draw_text(panel_x, panel_y + panel_h - 50, "Select an Upgrade")
+    
+    #Options
+    start_y = panel_y + panel_h - 120
+    for i, [option, value] in enumerate(upgrade_options.items()):
+        if i == cursor_pos: #where cursor currently is
+            glColor3f(1,1,0)
+            prefix  = "> "
+        else:
+            glColor3f(1,1,1)
+            prefix = "  "
+        
+        draw_text(panel_x, start_y - i * 40, f"{prefix}{option}: {value} + 1") #the option text
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
 
 
 
@@ -564,6 +625,7 @@ def delta_time():
 
 def keyboardListener(key, x, y):
     global key_buffer,player_pos, camera_pos,PLAYER_ANGLE,PLAYER_SPEED, CAMERA_THETA, target_pos, POV, GAME_MODE
+    global show_upgrade_menu
 
     if key == b'w':
         if POV == 0:
@@ -619,6 +681,10 @@ def keyboardListener(key, x, y):
         else:
             print(f"❌ Out of bounds: ({grid_row}, {grid_col})")
             print("===========================\n")
+
+    #temporary
+    if key == b'm':
+        show_upgrade_menu = not show_upgrade_menu
 
 # def keyboardUpListener(key, x, y):
 #     if key == b'w':
@@ -857,12 +923,11 @@ def showScreen():
     #drawBomb(GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0, )
 
 
+    # ============= All ortho things after here ================
 
-    # Display game info text at a fixed screen position
-    draw_text(10, 770, f"A Random Fixed Position Text")
-    draw_text(10, 740, f"See how the position and variable change?: {rand_var}")
-    draw_text(10, 710, f"Player Position: {player_pos}")
-
+    #glClear(GL_DEPTH_BUFFER_BIT) #remove the depth before drawing ortho stufff
+    if show_upgrade_menu:
+        draw_upgrade_menu()
 
     # Swap buffers for smooth rendering (double buffering)
     glutSwapBuffers()
