@@ -107,21 +107,27 @@ game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 
 
 #bomb info
-ALL_BOMBS = [] # list of all bombs, [x, y, time_to_explode], the x and y will follow game_map
+ALL_BOMBS = []  # List of bomb dictionaries: {"row", "col", "time", "owner", "damage", "radius"}
 PULSE_RATE = 5
 EXPLOTION_TIME = 3
 
 DEFAULT_EXPLOTION_RADIUS = 1 # in tiles
+DEFAULT_BOMB_DAMAGE = 25
 
+# Player bomb stats (upgradable)
 MAX_PLAYER_BOMB_EXPLOTION_RADIUS = DEFAULT_EXPLOTION_RADIUS
 PLAYER_BOMB_EXPLOTION_RADIUS = MAX_PLAYER_BOMB_EXPLOTION_RADIUS  #===Upgradable========
 
+PLAYER_BOMB_DAMAGE = DEFAULT_BOMB_DAMAGE 
 MAX_NUMBER_OF_PLAYER_BOMBS = 2
 NUMBER_OF_PLAYER_BOMBS = MAX_NUMBER_OF_PLAYER_BOMBS  #===Upgradable========
 
 PLAYER_BOMB_INDEX = [] #index of the bombs in ALL_BOMBS
 PLAYER_BOMB_EXPLOTION_TIME = 1
-ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration]
+ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration, radius, affected_tiles]
+
+#enemy stats
+ENEMY_BOMB_DAMAGE = 15
 
 
 #Upgrade Screen info 
@@ -230,22 +236,50 @@ def print_game_map():
         print(line)
     print("================\n")
     
-def plantBomb(position, bombindex):
+def plantBomb(position, bombindex, owner=PLAYER_ONE, damage=None, radius=None):
+    """
+    Plant a bomb at the given position.
+    owner: PLAYER_ONE, PLAYER_TWO, or ENEMY
+    damage: Custom damage (defaults to player/enemy damage based on owner)
+    radius: Custom radius (defaults to player/enemy radius based on owner)
+    """
     px, py, pz = position
     grid_row, grid_col = world_to_grid(px, py)
+
+    # Set defaults based on owner
+    if damage is None:
+        if owner == PLAYER_ONE:
+            damage = PLAYER_BOMB_DAMAGE
+        elif owner == ENEMY:
+            damage = ENEMY_BOMB_DAMAGE
+        else:
+            damage = DEFAULT_BOMB_DAMAGE
+    
+    if radius is None:
+        if owner == PLAYER_ONE:
+            radius = PLAYER_BOMB_EXPLOTION_RADIUS
+        else:
+            radius = DEFAULT_EXPLOTION_RADIUS
 
     # Check bounds
     if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
         tile_type = game_map[grid_row][grid_col]
         print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
         print(f"(0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
-            
 
         if tile_type == EMPTY:
             game_map[grid_row][grid_col] = BOMB
-            ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
+            bomb = {
+                "row": grid_row,
+                "col": grid_col,
+                "time": time.time() + EXPLOTION_TIME,
+                "owner": owner,
+                "damage": damage,
+                "radius": radius
+            }
+            ALL_BOMBS.append(bomb)
             bombindex.append(len(ALL_BOMBS) - 1)
-            print(f"Bomb placed at grid ({grid_row}, {grid_col})")
+            print(f"Bomb placed at grid ({grid_row}, {grid_col}) - Owner: {owner}, Damage: {damage}, Radius: {radius}")
         else:
             print(f"Cannot place bomb - tile occupied (type: {tile_type})")
     else:
@@ -254,12 +288,18 @@ def plantBomb(position, bombindex):
 
 #=================== Bomb Trigger ================================
 def TriggerBomb():
-    global ALL_BOMBS, PLAYER_BOMB_INDEX, PLAYER_BOMB_EXPLOTION_RADIUS
+    global ALL_BOMBS, PLAYER_BOMB_INDEX
     if len(PLAYER_BOMB_INDEX) > 0:
         last_bomb_index = PLAYER_BOMB_INDEX[-1]
-        x, y, explotion = ALL_BOMBS[last_bomb_index]
-        start_explosion_animation(x, y, PLAYER_BOMB_EXPLOTION_TIME, PLAYER_BOMB_EXPLOTION_RADIUS)
-        game_map[x][y] = EMPTY
+        bomb = ALL_BOMBS[last_bomb_index]
+        start_explosion_animation(
+            bomb["row"], bomb["col"], 
+            PLAYER_BOMB_EXPLOTION_TIME, 
+            bomb["radius"], 
+            bomb["damage"],
+            bomb["owner"]
+        )
+        game_map[bomb["row"]][bomb["col"]] = EMPTY
         ALL_BOMBS.pop(last_bomb_index)
         PLAYER_BOMB_INDEX.pop()
     else:
@@ -271,12 +311,19 @@ def checkAllBombs():
     
     i = len(ALL_BOMBS) - 1
     while i >= 0:
-        grid_row, grid_col, explosion_time = ALL_BOMBS[i]
+        bomb = ALL_BOMBS[i]
         
-        if time_now >= explosion_time:
-            start_explosion_animation(grid_row, grid_col, PLAYER_BOMB_EXPLOTION_TIME, DEFAULT_EXPLOTION_RADIUS)
+        if time_now >= bomb["time"]:
+            start_explosion_animation(
+                bomb["row"], bomb["col"],
+                PLAYER_BOMB_EXPLOTION_TIME,
+                bomb["radius"],
+                bomb["damage"],
+                bomb["owner"]
+            )
             
-            game_map[grid_row][grid_col] = EMPTY
+            game_map[bomb["row"]][bomb["col"]] = EMPTY
+            print(f"Bomb exploded at ({bomb['row']}, {bomb['col']})")
             
             ALL_BOMBS.pop(i)
             
@@ -284,8 +331,6 @@ def checkAllBombs():
                 PLAYER_BOMB_INDEX.remove(i)
             
             PLAYER_BOMB_INDEX = [idx - 1 if idx > i else idx for idx in PLAYER_BOMB_INDEX]
-            
-            print(f"Bomb exploded at ({grid_row}, {grid_col})")
         
         i -= 1
 
@@ -316,13 +361,13 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glMatrixMode(GL_MODELVIEW)
 
 
-def start_explosion_animation(grid_row, grid_col, duration=1.0, radius=DEFAULT_EXPLOTION_RADIUS):
+def start_explosion_animation(grid_row, grid_col, duration=1.0, radius=DEFAULT_EXPLOTION_RADIUS, damage=DEFAULT_BOMB_DAMAGE, owner=PLAYER_ONE):
     
     global ACTIVE_EXPLOSIONS
     
     affected_tiles = calculate_explosion_tiles(grid_row, grid_col, radius)
     
-    apply_explosion_damage(affected_tiles)
+    apply_explosion_damage(affected_tiles, damage, owner)
     
     ACTIVE_EXPLOSIONS.append([grid_row, grid_col, time.time(), duration, radius, affected_tiles])
 
@@ -359,15 +404,18 @@ def calculate_explosion_tiles(grid_row, grid_col, explosion_radius):
     return affected_tiles
 
 
-def apply_explosion_damage(affected_tiles):
+def apply_explosion_damage(affected_tiles, damage, owner):
     """
     Apply damage to tiles affected by explosion.
     Destroys destructible walls and damages players/enemies.
+    damage: Amount of damage this explosion deals
+    owner: Who placed the bomb (PLAYER_ONE, PLAYER_TWO, ENEMY)
     """
-    global game_map, current_health, player_pos
+    global game_map, CURRENT_HEALTH, player_pos
     
     for row, col in affected_tiles:
         tile_type = game_map[row][col]
+        world_x, world_y = grid_to_world(row, col)
         
         # Destroy destructible walls
         if tile_type == DESTRUCTIBLE_WALL:
@@ -379,11 +427,21 @@ def apply_explosion_damage(affected_tiles):
             game_map[row][col] = EMPTY
             # TODO: Could trigger chain reaction here
         
-        # Check if player is on this tile (when you implement player on map)
-        # world_x, world_y = grid_to_world(row, col)
-        # if player_is_at_position(world_x, world_y):
-        #     current_health -= 25  # Damage amount
-        #     print(f"Player hit! Health: {current_health}")
+        # Check if player is on this tile
+        player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
+        if row == player_row and col == player_col:
+            # Player takes damage (can be from own bomb or enemy bomb)
+            CURRENT_HEALTH -= damage
+            print(f"Player hit by explosion! Damage: {damage}, Health: {CURRENT_HEALTH}")
+            if CURRENT_HEALTH <= 0:
+                print("PLAYER DIED!")
+                # TODO: Handle player death
+        
+        # TODO: Check enemies on this tile
+        # for enemy in ALL_ENEMIES:
+        #     if enemy["row"] == row and enemy["col"] == col:
+        #         enemy["health"] -= damage
+        #         print(f"Enemy hit! Damage: {damage}")
 
 
 def update_and_draw_explosions():
@@ -828,8 +886,7 @@ def clamp_to_map(x, y):
 def draw_allBombs():
     global ALL_BOMBS
     for bomb in ALL_BOMBS:
-        gridx, gridy = bomb[0], bomb[1]
-        world_x, world_y = grid_to_world(gridx, gridy)
+        world_x, world_y = grid_to_world(bomb["row"], bomb["col"])
         drawBomb(world_x, world_y, 0)
 
 #============= Delta Time ==================================
