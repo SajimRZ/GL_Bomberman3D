@@ -47,6 +47,7 @@ rand_var = 423
 EMPTY = 0
 INDESTRUCTIBLE_WALL = 1
 DESTRUCTIBLE_WALL = 2
+BOMB = 3
 
 #grid info
 TILE_SIZE = 500  # 500 because it divies 5000 evenly, change tile size if grid changes.
@@ -86,6 +87,13 @@ camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
 CAMERA_SPEED = 5
 CAMERA_THETA = 0
 
+#
+#bomb info
+PULSE_RATE = 5
+EXPLOTION_TIME = 3
+EXPLOTION_RADIUS = 3 # in tiles
+NUMBER_OF_BOMBS = 1
+
 target_pos = [player_pos[0], player_pos[1], player_pos[2]]
 
 
@@ -104,6 +112,9 @@ key_buffer = {
 #map info
 game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 
+
+#bomb info
+ALL_BOMBS = [] # list of all bombs, [x, y, time_to_explode], the x and y will follow game_map
 
 
 def initialize_game_map():
@@ -156,8 +167,8 @@ def grid_to_world(grid_row, grid_col):
 
 
 def world_to_grid(world_x, world_y):
-    grid_col = int((GRID_START_X - world_x) / TILE_SIZE)
-    grid_row = int((world_y - GRID_START_Y) / TILE_SIZE)
+    grid_col = round((GRID_START_X - world_x) / TILE_SIZE)
+    grid_row = round((world_y - GRID_START_Y) / TILE_SIZE)
     return grid_row, grid_col
 
 
@@ -355,7 +366,7 @@ def drawPlayer(num=1):
 def drawBomb(x, y, z):
     glPushMatrix()
     glTranslatef(x, y, z)
-    glScalef(math.sin(time.time()*5)*0.1 + 1, math.sin(time.time()*5)*0.1 + 1, math.sin(time.time()*5)*0.1 + 1)
+    glScalef(math.sin(time.time()*PULSE_RATE)*0.1 + 1, math.sin(time.time()*PULSE_RATE)*0.1 + 1, math.sin(time.time()*PULSE_RATE)*0.1 + 1)
     
     glPushMatrix()
     #glColor3f(0.5, 0.4, 1)
@@ -386,6 +397,7 @@ def drawBomb(x, y, z):
 
 
     glPopMatrix()
+
 
 
 #=================   Player Movement ===============================
@@ -532,6 +544,15 @@ def clamp_to_map(x, y):
     y = max(min_y, min(y, max_y))
     return x, y
 
+#
+#============= Bomb Placement ==============================
+
+def draw_allBombs():
+    global ALL_BOMBS
+    for bomb in ALL_BOMBS:
+        gridx, gridy = bomb[0], bomb[1]
+        world_x, world_y = grid_to_world(gridx, gridy)
+        drawBomb(world_x, world_y, 0)
 
 #============= Delta Time ==================================
 def delta_time():
@@ -578,6 +599,27 @@ def keyboardListener(key, x, y):
                 target_pos = [0, 500, 0]
             POV = (POV + 1) % 2  # Toggle between 0 and 1
 
+    if key == b' ':
+        px, py, pz = player_pos
+        grid_row, grid_col = world_to_grid(px, py)
+
+        # Check bounds
+        if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
+            tile_type = game_map[grid_row][grid_col]
+            print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
+            print(f"  (0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
+                
+
+            if tile_type == EMPTY:
+                game_map[grid_row][grid_col] = BOMB
+                ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
+                print(f"✅ Bomb placed at grid ({grid_row}, {grid_col})")
+            else:
+                print(f"❌ Cannot place bomb - tile occupied (type: {tile_type})")
+        else:
+            print(f"❌ Out of bounds: ({grid_row}, {grid_col})")
+            print("===========================\n")
+
 # def keyboardUpListener(key, x, y):
 #     if key == b'w':
 #          key_buffer['up'] = False
@@ -587,6 +629,7 @@ def keyboardListener(key, x, y):
 #         key_buffer['left'] = False
 #     if key == b'd':
 #         key_buffer['right'] = False
+
 
 
 def specialKeyListener(key, x, y):
@@ -681,7 +724,7 @@ def draw_tiles():
     for row in range(GRID_ROWS):
         for col in range(GRID_COLS):
             tile = game_map[row][col]
-            if tile == EMPTY:
+            if tile == EMPTY or tile == BOMB:
                 continue
 
             world_x, world_y = grid_to_world(row, col)
@@ -806,6 +849,8 @@ def showScreen():
     draw_tiles()
 
     #Draw the player
+    # drawBomb(GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0, )
+    draw_allBombs()
     drawPlayer(1)
     if GAME_MODE == 2:
         drawPlayer(2)
