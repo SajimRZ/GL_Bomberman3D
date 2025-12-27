@@ -48,6 +48,8 @@ EMPTY = 0
 INDESTRUCTIBLE_WALL = 1
 DESTRUCTIBLE_WALL = 2
 BOMB = 3
+PLAYER_ONE = 4
+ENEMY = 5
 
 #grid info
 TILE_SIZE = 500  # 500 because it divies 5000 evenly, change tile size if grid changes.
@@ -87,12 +89,7 @@ camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
 CAMERA_SPEED = 5
 CAMERA_THETA = 0
 
-#
-#bomb info
-PULSE_RATE = 5
-EXPLOTION_TIME = 3
-EXPLOTION_RADIUS = 3 # in tiles
-NUMBER_OF_BOMBS = 1
+
 
 target_pos = [player_pos[0], player_pos[1], player_pos[2]]
 
@@ -115,6 +112,14 @@ game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 
 #bomb info
 ALL_BOMBS = [] # list of all bombs, [x, y, time_to_explode], the x and y will follow game_map
+PULSE_RATE = 5
+EXPLOTION_TIME = 3
+DEFAULT_EXPLOTION_RADIUS = 1 # in tiles
+PLAYER_BOMB_EXPLOTION_RADIUS = DEFAULT_EXPLOTION_RADIUS
+NUMBER_OF_PLAYER_BOMBS = 2
+PLAYER_BOMB_INDEX = [] #index of the bombs in ALL_BOMBS
+PLAYER_BOMB_EXPLOTION_TIME = 1
+ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration]
 
 
 def initialize_game_map():
@@ -210,6 +215,65 @@ def print_game_map():
                 line += "X "
         print(line)
     print("================\n")
+    
+def plantBomb(position, bombindex):
+    px, py, pz = position
+    grid_row, grid_col = world_to_grid(px, py)
+
+    # Check bounds
+    if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
+        tile_type = game_map[grid_row][grid_col]
+        print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
+        print(f"(0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
+            
+
+        if tile_type == EMPTY:
+            game_map[grid_row][grid_col] = BOMB
+            ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
+            bombindex.append(len(ALL_BOMBS) - 1)
+            print(f"Bomb placed at grid ({grid_row}, {grid_col})")
+        else:
+            print(f"Cannot place bomb - tile occupied (type: {tile_type})")
+    else:
+        print(f"Out of bounds: ({grid_row}, {grid_col})")
+        print("===========================\n")
+
+#=================== Bomb Trigger ================================
+def TriggerBomb():
+    global ALL_BOMBS, PLAYER_BOMB_INDEX, PLAYER_BOMB_EXPLOTION_RADIUS
+    if len(PLAYER_BOMB_INDEX) > 0:
+        last_bomb_index = PLAYER_BOMB_INDEX[-1]
+        x, y, explotion = ALL_BOMBS[last_bomb_index]
+        start_explosion_animation(x, y, PLAYER_BOMB_EXPLOTION_TIME, PLAYER_BOMB_EXPLOTION_RADIUS)
+        game_map[x][y] = EMPTY
+        ALL_BOMBS.pop(last_bomb_index)
+        PLAYER_BOMB_INDEX.pop()
+    else:
+        print("No bombs to trigger")
+        
+def checkAllBombs():
+    global ALL_BOMBS, PLAYER_BOMB_INDEX, game_map
+    time_now = time.time()
+    
+    i = len(ALL_BOMBS) - 1
+    while i >= 0:
+        grid_row, grid_col, explosion_time = ALL_BOMBS[i]
+        
+        if time_now >= explosion_time:
+            start_explosion_animation(grid_row, grid_col, PLAYER_BOMB_EXPLOTION_TIME, DEFAULT_EXPLOTION_RADIUS)
+            
+            game_map[grid_row][grid_col] = EMPTY
+            
+            ALL_BOMBS.pop(i)
+            
+            if i in PLAYER_BOMB_INDEX:
+                PLAYER_BOMB_INDEX.remove(i)
+            
+            PLAYER_BOMB_INDEX = [idx - 1 if idx > i else idx for idx in PLAYER_BOMB_INDEX]
+            
+            print(f"Bomb exploded at ({grid_row}, {grid_col})")
+        
+        i -= 1
 
 
 def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
@@ -237,6 +301,133 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
 
+
+def start_explosion_animation(grid_row, grid_col, duration=1.0, radius=DEFAULT_EXPLOTION_RADIUS):
+    
+    global ACTIVE_EXPLOSIONS
+    
+    affected_tiles = calculate_explosion_tiles(grid_row, grid_col, radius)
+    
+    apply_explosion_damage(affected_tiles)
+    
+    ACTIVE_EXPLOSIONS.append([grid_row, grid_col, time.time(), duration, radius, affected_tiles])
+
+def calculate_explosion_tiles(grid_row, grid_col, explosion_radius):
+
+    global game_map, GRID_ROWS, GRID_COLS
+    affected_tiles = [(grid_row, grid_col)] 
+    directions = [
+        (-1, 0),  
+        (1, 0),   
+        (0, -1), 
+        (0, 1)    
+    ]
+    for dr, dc in directions:
+        for distance in range(1, explosion_radius + 1):
+            new_row = grid_row + (dr * distance)
+            new_col = grid_col + (dc * distance)
+            
+            
+            if not (0 <= new_row < GRID_ROWS and 0 <= new_col < GRID_COLS):
+                break  # Out of bounds
+            
+            tile_type = game_map[new_row][new_col]
+            
+            if tile_type == INDESTRUCTIBLE_WALL:
+                break
+            
+            affected_tiles.append((new_row, new_col))
+            
+            if tile_type == DESTRUCTIBLE_WALL:
+                break  
+            
+            #expanding if emplty / bomb
+    return affected_tiles
+
+
+def apply_explosion_damage(affected_tiles):
+    """
+    Apply damage to tiles affected by explosion.
+    Destroys destructible walls and damages players/enemies.
+    """
+    global game_map, current_health, player_pos
+    
+    for row, col in affected_tiles:
+        tile_type = game_map[row][col]
+        
+        # Destroy destructible walls
+        if tile_type == DESTRUCTIBLE_WALL:
+            game_map[row][col] = EMPTY
+            print(f"Destroyed wall at ({row}, {col})")
+        
+        # Remove bombs (chain reaction potential)
+        elif tile_type == BOMB:
+            game_map[row][col] = EMPTY
+            # TODO: Could trigger chain reaction here
+        
+        # Check if player is on this tile (when you implement player on map)
+        # world_x, world_y = grid_to_world(row, col)
+        # if player_is_at_position(world_x, world_y):
+        #     current_health -= 25  # Damage amount
+        #     print(f"Player hit! Health: {current_health}")
+
+
+def update_and_draw_explosions():
+    global ACTIVE_EXPLOSIONS, TILE_SIZE
+    
+    current_time = time.time()
+    sphere_radius = TILE_SIZE / 4
+    
+    i = 0
+    while i < len(ACTIVE_EXPLOSIONS):
+        grid_row, grid_col, start_time, duration, explosion_radius, affected_tiles = ACTIVE_EXPLOSIONS[i]
+        elapsed = current_time - start_time
+        
+        # Remove finished explosions
+        if elapsed >= duration:
+            ACTIVE_EXPLOSIONS.pop(i)
+            continue
+
+        half_duration = duration / 2
+        if elapsed < half_duration:
+            progress = elapsed / half_duration
+        else:
+            progress = 1 - (elapsed - half_duration) / half_duration
+        
+        current_sphere_radius = sphere_radius * progress
+        alpha = 1.0 - (elapsed / duration)
+        
+        # Draw explosion spheres on all affected tiles
+        for tile_row, tile_col in affected_tiles:
+            worldx, worldy = grid_to_world(tile_row, tile_col)
+            
+            glPushMatrix()
+            glTranslatef(worldx, worldy, current_sphere_radius)
+            
+            glColor4f(1.0, 0.5, 0.0, alpha)
+            glutSolidSphere(current_sphere_radius, 20, 20)
+            
+            glPopMatrix()
+        
+        i += 1
+        
+        
+# def explotion_animation(x, y): # x and y are the game grid coordinates
+#     global game_map, TILE_SIZE
+#     worldx, worldy = grid_to_world(x, y)
+#     max_radius = TILE_SIZE / 2
+#     min_radius = 0.1
+#     total_explotion_time = 1
+#     current_radius = min_radius
+    
+#     while current_radius < max_radius:
+#         current_radius += 0.1
+#         glPushMatrix()
+#         glTranslatef(worldx, worldy, 0)
+#         glScalef(current_radius, current_radius, current_radius)
+#         glutSolidSphere(current_radius, 20, 20)
+#         glPopMatrix()
+#         time.sleep(0.01)
 
 
 
@@ -598,28 +789,16 @@ def keyboardListener(key, x, y):
                 camera_pos = [0, 500, 6500]
                 target_pos = [0, 500, 0]
             POV = (POV + 1) % 2  # Toggle between 0 and 1
-
+            
     if key == b' ':
-        px, py, pz = player_pos
-        grid_row, grid_col = world_to_grid(px, py)
-
-        # Check bounds
-        if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
-            tile_type = game_map[grid_row][grid_col]
-            print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
-            print(f"  (0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
-                
-
-            if tile_type == EMPTY:
-                game_map[grid_row][grid_col] = BOMB
-                ALL_BOMBS.append([grid_row, grid_col, time.time() + EXPLOTION_TIME])
-                print(f"✅ Bomb placed at grid ({grid_row}, {grid_col})")
-            else:
-                print(f"❌ Cannot place bomb - tile occupied (type: {tile_type})")
+        if len(PLAYER_BOMB_INDEX) < NUMBER_OF_PLAYER_BOMBS:
+            plantBomb(player_pos, PLAYER_BOMB_INDEX)
         else:
-            print(f"❌ Out of bounds: ({grid_row}, {grid_col})")
-            print("===========================\n")
-
+            print("You have reached the bomb limit")
+        
+    if key == b'f':
+        TriggerBomb()
+            
 # def keyboardUpListener(key, x, y):
 #     if key == b'w':
 #          key_buffer['up'] = False
@@ -629,6 +808,8 @@ def keyboardListener(key, x, y):
 #         key_buffer['left'] = False
 #     if key == b'd':
 #         key_buffer['right'] = False
+
+
 
 
 
@@ -824,6 +1005,9 @@ def idle():
     dt = delta_time()
     if GAME_MODE == 2:
         POV = 1
+        
+    # checkAllBombs()
+    # TriggerBomb()
 
 
     glutPostRedisplay()
@@ -851,9 +1035,12 @@ def showScreen():
     #Draw the player
     # drawBomb(GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0, )
     draw_allBombs()
+    update_and_draw_explosions()
     drawPlayer(1)
     if GAME_MODE == 2:
         drawPlayer(2)
+        
+    
     #drawBomb(GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0, )
 
 
