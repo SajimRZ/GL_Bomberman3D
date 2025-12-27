@@ -43,6 +43,19 @@ fovY = 90  # Field of view
 GRID_LENGTH = 5000  
 rand_var = 423
 
+key_buffer = {
+    'up': 0,
+    'down': 0,
+    'left': 0,
+    'right': 0,
+    'up2': 0,
+    'down2': 0,
+    'left2': 0,
+    'right2': 0,
+}
+
+
+
 #walls
 EMPTY = 0
 INDESTRUCTIBLE_WALL = 1
@@ -89,19 +102,6 @@ CAMERA_THETA = 0
 
 target_pos = [player_pos[0], player_pos[1], player_pos[2]]
 
-
-key_buffer = {
-    'up': 0,
-    'down': 0,
-    'left': 0,
-    'right': 0,
-    'up2': 0,
-    'down2': 0,
-    'left2': 0,
-    'right2': 0,
-}
-
-
 #map info
 game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 
@@ -111,7 +111,7 @@ ALL_BOMBS = []  # List of bomb dictionaries: {"row", "col", "time", "owner", "da
 PULSE_RATE = 5
 EXPLOTION_TIME = 3
 
-DEFAULT_EXPLOTION_RADIUS = 1 # in tiles
+DEFAULT_EXPLOTION_RADIUS = 2 # in tiles
 DEFAULT_BOMB_DAMAGE = 25
 
 # Player bomb stats (upgradable)
@@ -126,8 +126,41 @@ PLAYER_BOMB_INDEX = [] #index of the bombs in ALL_BOMBS
 PLAYER_BOMB_EXPLOTION_TIME = 1
 ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration, radius, affected_tiles]
 
-#enemy stats
-ENEMY_BOMB_DAMAGE = 15
+#------------------------ Enemy stats ------------------------#
+# Base enemy stats
+ENEMY_BASE_SPEED = 80
+ENEMY_BASE_HEALTH = 50
+ENEMY_BOMB_DAMAGE = DEFAULT_BOMB_DAMAGE
+ENEMY_BOMB_RADIUS = DEFAULT_EXPLOTION_RADIUS
+
+# Pathfinding
+ENEMY_PATH_UPDATE_INTERVAL = 0.5  # Seconds between BFS recalculations
+ENEMY_PATH_INTERVAL_MIN = 0.15    # Fastest update rate (later waves)
+ENEMY_PATH_SPEEDUP_PER_WAVE = 0.03  # Interval decreases each wave
+
+# Enemy bomb placement
+ENEMY_BOMB_PROXIMITY = 1          # Place bomb if player within X tiles
+ENEMY_BOMB_COOLDOWN = 3.0         # Seconds between bomb placements
+ENEMY_BOMB_INDEX = []             # Track enemy bombs (like PLAYER_BOMB_INDEX)
+
+# Spawning
+ENEMY_SPAWN_MIN_DISTANCE = 5      # Min tiles away from player to spawn
+ENEMY_SPAWN_DELAY = 1.0           # Delay between each enemy spawn in a wave
+
+#================== WAVE SYSTEM ==================
+
+CURRENT_WAVE = 0
+WAVE_ACTIVE = False
+ENEMIES_PER_WAVE_BASE = 3
+ENEMIES_PER_WAVE_INCREASE = 1     # +1 enemy per wave
+WAVE_DELAY = 3.0                  # Seconds between waves
+WAVE_START_TIME = 0               # When current wave started
+
+#================== GAME STATE ==================
+
+GAME_STATE = "playing"  # "playing", "paused", "game_over", "wave_complete", "wave_starting"
+SCORE = 0
+ENEMIES_KILLED = 0
 
 
 #Upgrade Screen info 
@@ -329,9 +362,7 @@ def checkAllBombs():
             
             if i in PLAYER_BOMB_INDEX:
                 PLAYER_BOMB_INDEX.remove(i)
-            
             PLAYER_BOMB_INDEX = [idx - 1 if idx > i else idx for idx in PLAYER_BOMB_INDEX]
-        
         i -= 1
 
 
