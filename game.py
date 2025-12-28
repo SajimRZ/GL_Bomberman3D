@@ -1099,7 +1099,7 @@ def handle_reset_game():
     target_pos = [player_pos[0], player_pos[1], 0]
 
 #=================== Enter on the upgrade ========================
-def slect_and_apply_upgrade():
+def select_and_apply_upgrade():
     # for upgrade system
     global upgrade_options, cursor_pos
 
@@ -1584,7 +1584,7 @@ def keyboardListener(key, x, y):
 
     if key == b'\r':  #enter
         if show_upgrade_menu:
-            slect_and_apply_upgrade()
+            select_and_apply_upgrade()
             show_upgrade_menu = False
             cursor_pos = 0
             wave_start()
@@ -1841,7 +1841,7 @@ def draw_ground(n):
 
 
 def idle():
-    global POV, GAME_MODE, PREV_PLAYER_POS, player_pos
+    global POV, GAME_MODE, PREV_PLAYER_POS, player_pos, WAVE_ACTIVE
     """
     Idle function that runs continuously:
     - Triggers screen redraw for real-time updates.
@@ -1856,6 +1856,9 @@ def idle():
     
     # Update enemies (BFS pathfinding + movement)
     update_enemies(dt)
+    
+    # Check if wave is complete
+    check_wave_complete()
     
     #update player position on map 
     
