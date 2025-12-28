@@ -181,7 +181,7 @@ ENEMY_ID_COUNTER = 0  # For generating unique enemy IDs
 
 CURRENT_WAVE = 0
 WAVE_ACTIVE = False
-ENEMIES_PER_WAVE_BASE = 10 # this is used as enemy count for the first wave
+ENEMIES_PER_WAVE_BASE = 1 # this is used as enemy count for the first wave
 ENEMIES_PER_WAVE_INCREASE = 1     # +1 enemy per wave
 ENEMIES_IN_ENDLESS = 0
 WAVE_DELAY = 3.0                  # Seconds between waves
@@ -197,6 +197,7 @@ ENEMIES_KILLED = 0
 
 #Upgrade Screen info 
 show_upgrade_menu = False
+show_stats = False
 
 upgrade_options = {
     "Bomb Number": NUMBER_OF_PLAYER_BOMBS,
@@ -689,7 +690,7 @@ def apply_explosion_damage(affected_tiles, damage, owner):
     - Player takes damage from ALL bombs (player and enemy)
     - Enemies only take damage from PLAYER bombs (not from other enemies)
     """
-    global game_map, CURRENT_HEALTH, player_pos, GAME_STATE, ALL_ENEMIES, ENEMIES_KILLED
+    global game_map, CURRENT_HEALTH, player_pos, GAME_STATE, ALL_ENEMIES, ENEMIES_KILLED, gold, GAME_MODE
     
     for row, col in affected_tiles:
         tile_type = game_map[row][col]
@@ -712,12 +713,17 @@ def apply_explosion_damage(affected_tiles, damage, owner):
                 print("PLAYER DIED!")
                 WIN = False
                 GAME_STATE = "game over"
+                if GAME_MODE == 0:
+                    gold_earned = CURRENT_WAVE * 10
+                    gold += gold_earned
+                    print(f"Earned {gold_earned} gold! Total gold: {gold}")
         
 
         if owner == PLAYER_ONE:  
             enemies_to_remove = []
+            tile_world_x, tile_world_y = grid_to_world(row, col)
             for i, enemy in enumerate(ALL_ENEMIES):
-                if enemy["row"] == row and enemy["col"] == col:
+                if abs(enemy["world_x"] - tile_world_x) < TILE_SIZE / 2 and abs(enemy["world_y"] - tile_world_y) < TILE_SIZE / 2:
                     enemy["health"] -= damage
                     print(f"Enemy {enemy['id']} hit! Damage: {damage}, Health: {enemy['health']}")
                     
@@ -725,10 +731,13 @@ def apply_explosion_damage(affected_tiles, damage, owner):
                         print(f"Enemy {enemy['id']} killed!")
                         enemies_to_remove.append(i)
                         ENEMIES_KILLED += 1
-            
 
             for i in reversed(enemies_to_remove):
                 ALL_ENEMIES.pop(i)
+            
+            if GAME_MODE == 1 and len(ALL_ENEMIES) < ENEMIES_IN_ENDLESS:
+                spawned = spawn_enemies(1, ENEMY_SPAWN_MIN_DISTANCE)
+                print(f"Spawned {spawned} replacement enemy in endless mode!")
 
 
 
@@ -798,6 +807,10 @@ def check_wave_complete():
         if CURRENT_WAVE >= 10:  # Win condition
             WIN = True
             GAME_STATE = "game over"
+            if GAME_MODE == 0:
+                gold_earned = CURRENT_WAVE * 10
+                gold += gold_earned
+                print(f"Earned {gold_earned} gold! Total gold: {gold}")
             print("You won the game!")
         else:
             GAME_STATE = "wave_complete"
@@ -998,12 +1011,6 @@ def draw_game_over():
 
     glClear(GL_DEPTH_BUFFER_BIT)
 
-    # Add gold if in wave mode
-    if GAME_MODE == 0:
-        gold_earned = CURRENT_WAVE * 10
-        gold += gold_earned
-        print(f"Earned {gold_earned} gold! Total gold: {gold}")
-
     # Game over message
     if WIN:
         draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50, "You Win!")
@@ -1012,6 +1019,40 @@ def draw_game_over():
     draw_text(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2, f"Score: {SCORE}, Waves Cleared: {CURRENT_WAVE}")
     draw_text(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 50, f"Gold Earned: {CURRENT_WAVE * 10}")
     draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, "Press Enter to Return to Main Menu")
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+
+def draw_hud():
+    """
+    Draws the HUD with health and optional stats.
+    """
+    global CURRENT_HEALTH, MAX_HEALTH, show_stats
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    glClear(GL_DEPTH_BUFFER_BIT)
+    # Always show health
+    draw_text(10, SCREEN_HEIGHT - 130, f"Health: {CURRENT_HEALTH}/{MAX_HEALTH}")
+
+    if show_stats:
+        # Show additional stats
+        draw_text(10, SCREEN_HEIGHT - 160, f"Bombs: {NUMBER_OF_PLAYER_BOMBS}")
+        draw_text(10, SCREEN_HEIGHT - 190, f"Explosion Radius: {PLAYER_BOMB_EXPLOTION_RADIUS}")
+        draw_text(10, SCREEN_HEIGHT - 220, f"Bomb Damage: {PLAYER_BOMB_DAMAGE}")
+        draw_text(10, SCREEN_HEIGHT - 250, f"Speed: {PLAYER_SPEED}")
+        draw_text(10, SCREEN_HEIGHT - 280, f"Wave: {CURRENT_WAVE}")
+        draw_text(10, SCREEN_HEIGHT - 310, f"Score: {SCORE}")
+        draw_text(10, SCREEN_HEIGHT - 340, f"Enemies Killed: {ENEMIES_KILLED}")
 
     glPopMatrix()
     glMatrixMode(GL_PROJECTION)
@@ -1550,6 +1591,7 @@ def keyboardListener(key, x, y):
         elif GAME_STATE == "main menu":
             if cursor_pos == 0:
                 GAME_MODE = 0
+                CURRENT_WAVE = 0
                 wave_start()
             elif cursor_pos == 1:
                 GAME_MODE = 1
@@ -1569,6 +1611,9 @@ def keyboardListener(key, x, y):
     #temporary
     if key == b'm':
         show_upgrade_menu = not show_upgrade_menu
+    elif key == b'\t':  # Tab
+        global show_stats
+        show_stats = not show_stats
 
 # def keyboardUpListener(key, x, y):
 #     if key == b'w':
@@ -1872,6 +1917,8 @@ def showScreen():
     if show_upgrade_menu:
         draw_upgrade_menu()
 
+    draw_hud()
+
     # Swap buffers for smooth rendering (double buffering)
     glutSwapBuffers()
 
@@ -1889,7 +1936,6 @@ def main():
     player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
     game_map[player_row][player_col] = PLAYER_ONE
     
-    spawn_enemies(ENEMIES_PER_WAVE_BASE, ENEMY_SPAWN_MIN_DISTANCE)
     print_game_map()  # Print map to console for debugging
     draw_walls()
     # print(f"ALL_ENEMIES: {ALL_ENEMIES}")
