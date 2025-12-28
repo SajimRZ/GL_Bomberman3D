@@ -146,6 +146,7 @@ ENEMY_BOMB_INDEX = []             # Track enemy bombs (like PLAYER_BOMB_INDEX)
 # Spawning
 ENEMY_SPAWN_MIN_DISTANCE = 5      # Min tiles away from player to spawn
 ENEMY_SPAWN_DELAY = 1.0           # Delay between each enemy spawn in a wave
+ALL_ENEMIES = []
 
 #================== WAVE SYSTEM ==================
 
@@ -531,6 +532,25 @@ def update_and_draw_explosions():
 #         glutSolidSphere(current_radius, 20, 20)
 #         glPopMatrix()
 #         time.sleep(0.01)
+
+
+def check_wave_complete():
+    global GAME_STATE, ALL_ENEMIES, CURRENT_WAVE, WAVE_ACTIVE, WAVE_START_TIME
+
+    if WAVE_ACTIVE and len(ALL_ENEMIES) == 0:
+        WAVE_ACTIVE = False
+        GAME_STATE = "wave_complete"
+        print(f"Wave {CURRENT_WAVE} complete!")
+        end_wave_todo()
+
+def end_wave_todo():
+    global show_upgrade_menu, GAME_STATE, WAVE_START_TIME
+
+    show_upgrade_menu = True
+    GAME_STATE = "shop"
+
+def wave_start():
+    ...
 
 
 #===================== Ortho Upgrade Menu ===============================
@@ -980,6 +1000,7 @@ def keyboardListener(key, x, y):
         if show_upgrade_menu:
             slect_and_apply_upgrade()
             show_upgrade_menu = False
+            #Todo: wave_start()
             
     #temporary
     if key == b'm':
