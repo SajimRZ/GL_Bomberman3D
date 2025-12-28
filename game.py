@@ -81,10 +81,11 @@ PLAYER_ANGLE = 0
 PREV_PLAYER_POS = player_pos
 
 POV = 0  # 0: Third-person, 1: Top-down
+MAX_PLAYER_SPEED = 50
 if POV == 0:
-    PLAYER_SPEED = 50
+    PLAYER_SPEED = MAX_PLAYER_SPEED
 elif POV == 1 and GAME_MODE == 2:
-    PLAYER_SPEED = 200
+    PLAYER_SPEED = MAX_PLAYER_SPEED * 1.5
 PLAYER_RADIUS = 100
 
 player_two_pos = [ -GRID_START_X, -GRID_START_Y , 0]
@@ -115,7 +116,9 @@ PULSE_RATE = 5
 EXPLOTION_TIME = 3
 
 DEFAULT_EXPLOTION_RADIUS = 2 # in tiles
-DEFAULT_BOMB_DAMAGE = 25
+
+MAX_BOMB_DAMAGE = 25
+DEFAULT_BOMB_DAMAGE = MAX_BOMB_DAMAGE
 
 # Player bomb stats (upgradable)
 MAX_PLAYER_BOMB_EXPLOTION_RADIUS = DEFAULT_EXPLOTION_RADIUS
@@ -132,7 +135,8 @@ ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration, radius, aff
 #------------------------ Enemy stats ------------------------#
 # Base enemy stats
 ENEMY_BASE_SPEED = 80
-ENEMY_BASE_HEALTH = 50
+MAX_ENEMY_HP = 50
+ENEMY_BASE_HEALTH = MAX_ENEMY_HP
 ENEMY_BOMB_DAMAGE = DEFAULT_BOMB_DAMAGE
 ENEMY_BOMB_RADIUS = DEFAULT_EXPLOTION_RADIUS
 
@@ -195,6 +199,8 @@ upgrade_options = {
     "Bomb Number": NUMBER_OF_PLAYER_BOMBS,
     "Explosion Radius": PLAYER_BOMB_EXPLOTION_RADIUS,
     "Heal up": CURRENT_HEALTH,
+    "Damage up": PLAYER_BOMB_DAMAGE,
+    "Speed Up": PLAYER_SPEED,
 }
 cursor_pos = 0
 
@@ -656,7 +662,16 @@ def end_wave_todo():
     GAME_STATE = "shop"
 
 def wave_start():
-    ...
+    global GAME_STATE, WAVE_ACTIVE, CURRENT_WAVE, WAVE_START_TIME
+
+    CURRENT_WAVE += 1
+    WAVE_ACTIVE = True
+    WAVE_START_TIME = time.time()
+    GAME_STATE = "playing"
+    
+    num_enemies = ENEMIES_PER_WAVE_BASE + (CURRENT_WAVE - 1) * ENEMIES_PER_WAVE_INCREASE
+    spawned = spawn_enemies(num_enemies, ENEMY_SPAWN_MIN_DISTANCE)
+    print(f"Wave {CURRENT_WAVE} started with {spawned} enemies!")
 
 
 #===================== Ortho Upgrade Menu ===============================
@@ -715,7 +730,7 @@ def slect_and_apply_upgrade():
     global NUMBER_OF_PLAYER_BOMBS, PLAYER_BOMB_EXPLOTION_RADIUS
 
     #player stats
-    global CURRENT_HEALTH
+    global CURRENT_HEALTH, PLAYER_SPEED, PLAYER_BOMB_DAMAGE
 
     selected_option = list(upgrade_options.keys())[cursor_pos]
 
@@ -730,6 +745,12 @@ def slect_and_apply_upgrade():
         if CURRENT_HEALTH > MAX_HEALTH:
             CURRENT_HEALTH = MAX_HEALTH
         upgrade_options[selected_option] = CURRENT_HEALTH
+    if selected_option == "Damage up":
+        PLAYER_BOMB_DAMAGE += 5
+        upgrade_options[selected_option] = PLAYER_BOMB_DAMAGE
+    if selected_option == "Speed Up":
+        PLAYER_SPEED += 2
+        upgrade_options[selected_option] = PLAYER_SPEED
         
 
 
