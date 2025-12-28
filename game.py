@@ -82,10 +82,11 @@ PLAYER_ANGLE = 0
 PREV_PLAYER_POS = player_pos
 
 POV = 0  # 0: Third-person, 1: Top-down
+MAX_PLAYER_SPEED = 50
 if POV == 0:
-    PLAYER_SPEED = 50
+    PLAYER_SPEED = MAX_PLAYER_SPEED
 elif POV == 1 and GAME_MODE == 2:
-    PLAYER_SPEED = 200
+    PLAYER_SPEED = MAX_PLAYER_SPEED * 1.5
 PLAYER_RADIUS = 100
 
 player_two_pos = [ -GRID_START_X, -GRID_START_Y , 0]
@@ -116,7 +117,9 @@ PULSE_RATE = 5
 EXPLOTION_TIME = 3
 
 DEFAULT_EXPLOTION_RADIUS = 2 # in tiles
-DEFAULT_BOMB_DAMAGE = 25
+
+MAX_BOMB_DAMAGE = 25
+DEFAULT_BOMB_DAMAGE = MAX_BOMB_DAMAGE
 
 # Player bomb stats (upgradable)
 MAX_PLAYER_BOMB_EXPLOTION_RADIUS = DEFAULT_EXPLOTION_RADIUS
@@ -133,7 +136,8 @@ ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration, radius, aff
 #------------------------ Enemy stats ------------------------#
 # Base enemy stats
 ENEMY_BASE_SPEED = 200
-ENEMY_BASE_HEALTH = 50
+MAX_ENEMY_HP = 50
+ENEMY_BASE_HEALTH = MAX_ENEMY_HP
 ENEMY_BOMB_DAMAGE = DEFAULT_BOMB_DAMAGE
 ENEMY_BOMB_RADIUS = DEFAULT_EXPLOTION_RADIUS
 
@@ -177,24 +181,30 @@ ENEMY_ID_COUNTER = 0  # For generating unique enemy IDs
 
 CURRENT_WAVE = 0
 WAVE_ACTIVE = False
-ENEMIES_PER_WAVE_BASE = 10 # this is used as enemy count for the first wave
+ENEMIES_PER_WAVE_BASE = 1 # this is used as enemy count for the first wave
 ENEMIES_PER_WAVE_INCREASE = 1     # +1 enemy per wave
+ENEMIES_IN_ENDLESS = 0
 WAVE_DELAY = 3.0                  # Seconds between waves
 WAVE_START_TIME = 0               # When current wave started
 
 #================== GAME STATE ==================
 
-GAME_STATE = "playing"  # "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop"
+GAME_STATE = "main menu"  # "main menu", "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop", "permanent_shop", "end scn"
 SCORE = 0
+WIN = False
+gold = 0
 ENEMIES_KILLED = 0
 
 #Upgrade Screen info 
 show_upgrade_menu = False
+show_stats = False
 
 upgrade_options = {
     "Bomb Number": NUMBER_OF_PLAYER_BOMBS,
     "Explosion Radius": PLAYER_BOMB_EXPLOTION_RADIUS,
     "Heal up": CURRENT_HEALTH,
+    "Damage up": PLAYER_BOMB_DAMAGE,
+    "Speed Up": PLAYER_SPEED,
 }
 cursor_pos = 0
 
@@ -680,7 +690,7 @@ def apply_explosion_damage(affected_tiles, damage, owner):
     - Player takes damage from ALL bombs (player and enemy)
     - Enemies only take damage from PLAYER bombs (not from other enemies)
     """
-    global game_map, CURRENT_HEALTH, player_pos, ALL_ENEMIES, ENEMIES_KILLED
+    global game_map, CURRENT_HEALTH, player_pos, GAME_STATE, ALL_ENEMIES, ENEMIES_KILLED, gold, GAME_MODE
     
     for row, col in affected_tiles:
         tile_type = game_map[row][col]
@@ -701,13 +711,19 @@ def apply_explosion_damage(affected_tiles, damage, owner):
             print(f"Player hit by explosion! Damage: {damage}, Health: {CURRENT_HEALTH}")
             if CURRENT_HEALTH <= 0:
                 print("PLAYER DIED!")
-                # TODO: Handle player death
+                WIN = False
+                GAME_STATE = "game over"
+                if GAME_MODE == 0:
+                    gold_earned = CURRENT_WAVE * 10
+                    gold += gold_earned
+                    print(f"Earned {gold_earned} gold! Total gold: {gold}")
         
 
         if owner == PLAYER_ONE:  
             enemies_to_remove = []
+            tile_world_x, tile_world_y = grid_to_world(row, col)
             for i, enemy in enumerate(ALL_ENEMIES):
-                if enemy["row"] == row and enemy["col"] == col:
+                if abs(enemy["world_x"] - tile_world_x) < TILE_SIZE / 2 and abs(enemy["world_y"] - tile_world_y) < TILE_SIZE / 2:
                     enemy["health"] -= damage
                     print(f"Enemy {enemy['id']} hit! Damage: {damage}, Health: {enemy['health']}")
                     
@@ -715,10 +731,13 @@ def apply_explosion_damage(affected_tiles, damage, owner):
                         print(f"Enemy {enemy['id']} killed!")
                         enemies_to_remove.append(i)
                         ENEMIES_KILLED += 1
-            
 
             for i in reversed(enemies_to_remove):
                 ALL_ENEMIES.pop(i)
+            
+            if GAME_MODE == 1 and len(ALL_ENEMIES) < ENEMIES_IN_ENDLESS:
+                spawned = spawn_enemies(1, ENEMY_SPAWN_MIN_DISTANCE)
+                print(f"Spawned {spawned} replacement enemy in endless mode!")
 
 
 
@@ -781,13 +800,22 @@ def update_and_draw_explosions():
 
 
 def check_wave_complete():
-    global GAME_STATE, ALL_ENEMIES, CURRENT_WAVE, WAVE_ACTIVE, WAVE_START_TIME
+    global GAME_STATE, ALL_ENEMIES, CURRENT_WAVE, WAVE_ACTIVE, WAVE_START_TIME, GAME_MODE, WIN
 
-    if WAVE_ACTIVE and len(ALL_ENEMIES) == 0:
+    if WAVE_ACTIVE and len(ALL_ENEMIES) == 0 and GAME_MODE != 1:  # Not endless
         WAVE_ACTIVE = False
-        GAME_STATE = "wave_complete"
-        print(f"Wave {CURRENT_WAVE} complete!")
-        end_wave_todo()
+        if CURRENT_WAVE >= 10:  # Win condition
+            WIN = True
+            GAME_STATE = "game over"
+            if GAME_MODE == 0:
+                gold_earned = CURRENT_WAVE * 10
+                gold += gold_earned
+                print(f"Earned {gold_earned} gold! Total gold: {gold}")
+            print("You won the game!")
+        else:
+            GAME_STATE = "wave_complete"
+            print(f"Wave {CURRENT_WAVE} complete!")
+            end_wave_todo()
 
 def end_wave_todo():
     global show_upgrade_menu, GAME_STATE, WAVE_START_TIME
@@ -796,7 +824,18 @@ def end_wave_todo():
     GAME_STATE = "shop"
 
 def wave_start():
-    ...
+    global GAME_STATE, WAVE_ACTIVE, CURRENT_WAVE, WAVE_START_TIME, ENEMIES_IN_ENDLESS
+
+    CURRENT_WAVE += 1
+    WAVE_ACTIVE = True
+    WAVE_START_TIME = time.time()
+    GAME_STATE = "playing"
+    
+    num_enemies = ENEMIES_PER_WAVE_BASE + (CURRENT_WAVE - 1) * ENEMIES_PER_WAVE_INCREASE
+    if GAME_MODE == 1:  # Endless mode
+        ENEMIES_IN_ENDLESS = num_enemies
+    spawned = spawn_enemies(num_enemies, ENEMY_SPAWN_MIN_DISTANCE)
+    print(f"Wave {CURRENT_WAVE} started with {spawned} enemies!")
 
 
 #===================== Ortho Upgrade Menu ===============================
@@ -847,6 +886,219 @@ def draw_upgrade_menu():
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
 
+#====================== Main Menu ==========================
+def draw_main_menu():
+    """
+    Draws the main menu with options to start the game or access the shop.
+    """
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    # Draw background
+    glColor4f(0.1, 0.1, 0.1, 1.0)  # Dark gray
+    glBegin(GL_QUADS)
+    glVertex2f(0, 0)
+    glVertex2f(SCREEN_WIDTH, 0)
+    glVertex2f(SCREEN_WIDTH, SCREEN_HEIGHT)
+    glVertex2f(0, SCREEN_HEIGHT)
+    glEnd()
+
+    glClear(GL_DEPTH_BUFFER_BIT)
+
+    # Title
+    draw_text(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT -400, "3D Bomberman")
+
+    # Menu options
+    menu_options = ["Wave Mode", "Endless Mode", "Shop", "Local play"]
+    for i, option in enumerate(menu_options):
+        if i == cursor_pos:
+            prefix = "> "
+        else:
+            prefix = "  "
+        y_pos = SCREEN_HEIGHT // 2 - i * 50
+        glColor3f(1, 1, 0) if i == cursor_pos else glColor3f(1, 1, 1)
+        txt = prefix + option
+        draw_text(SCREEN_WIDTH // 2 - 100, y_pos, txt)
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+
+def draw_permanent_shop():
+    """
+    Draws the permanent shop for upgrading max stats.
+    """
+    global cursor_pos, gold
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    # Draw background
+    glColor4f(0.1, 0.1, 0.1, 1.0)  # Dark gray
+    glBegin(GL_QUADS)
+    glVertex2f(0, 0)
+    glVertex2f(SCREEN_WIDTH, 0)
+    glVertex2f(SCREEN_WIDTH, SCREEN_HEIGHT)
+    glVertex2f(0, SCREEN_HEIGHT)
+    glEnd()
+
+    glClear(GL_DEPTH_BUFFER_BIT)
+
+    # Title
+    draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 200, "Permanent Upgrades")
+    draw_text(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 250, f"Gold: {gold}")
+
+    # Shop options
+    shop_options = [
+        f"Increase Max Health (100 gold) - Current: {MAX_HEALTH}",
+        f"Increase Max Bombs (100 gold) - Current: {NUMBER_OF_PLAYER_BOMBS}",
+        f"Increase Explosion Radius (100 gold) - Current: {PLAYER_BOMB_EXPLOTION_RADIUS}",
+        f"Increase Player Speed (100 gold) - Current: {MAX_PLAYER_SPEED}",
+        f"Increase Bomb Damage (100 gold) - Current: {PLAYER_BOMB_DAMAGE}",
+        "Back to Main Menu"
+    ]
+    for i, option in enumerate(shop_options):
+        if i == cursor_pos:
+            prefix = "> "
+        else:
+            prefix = "  "
+        y_pos = SCREEN_HEIGHT // 2 - i * 40
+        glColor3f(1, 1, 0) if i == cursor_pos else glColor3f(1, 1, 1)
+        txt = prefix + option
+        draw_text(SCREEN_WIDTH // 2 - 250, y_pos, txt)
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+
+def draw_game_over():
+    """
+    Draws the game over screen with the player's progress.
+    """
+    global WIN, gold, CURRENT_WAVE, GAME_MODE
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    # Draw background
+    glColor4f(0.0, 0.0, 0.0, 1.0)  # Black
+    glBegin(GL_QUADS)
+    glVertex2f(0, 0)
+    glVertex2f(SCREEN_WIDTH, 0)
+    glVertex2f(SCREEN_WIDTH, SCREEN_HEIGHT)
+    glVertex2f(0, SCREEN_HEIGHT)
+    glEnd()
+
+    glClear(GL_DEPTH_BUFFER_BIT)
+
+    # Game over message
+    if WIN:
+        draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50, "You Win!")
+    else:
+        draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50, "Game Over")
+    draw_text(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2, f"Score: {SCORE}, Waves Cleared: {CURRENT_WAVE}")
+    draw_text(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 50, f"Gold Earned: {CURRENT_WAVE * 10}")
+    draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, "Press Enter to Return to Main Menu")
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+
+def draw_hud():
+    """
+    Draws the HUD with health and optional stats.
+    """
+    global CURRENT_HEALTH, MAX_HEALTH, show_stats
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    glClear(GL_DEPTH_BUFFER_BIT)
+    # Always show health
+    draw_text(10, SCREEN_HEIGHT - 130, f"Health: {CURRENT_HEALTH}/{MAX_HEALTH}")
+
+    if show_stats:
+        # Show additional stats
+        draw_text(10, SCREEN_HEIGHT - 160, f"Bombs: {NUMBER_OF_PLAYER_BOMBS}")
+        draw_text(10, SCREEN_HEIGHT - 190, f"Explosion Radius: {PLAYER_BOMB_EXPLOTION_RADIUS}")
+        draw_text(10, SCREEN_HEIGHT - 220, f"Bomb Damage: {PLAYER_BOMB_DAMAGE}")
+        draw_text(10, SCREEN_HEIGHT - 250, f"Speed: {PLAYER_SPEED}")
+        draw_text(10, SCREEN_HEIGHT - 280, f"Wave: {CURRENT_WAVE}")
+        draw_text(10, SCREEN_HEIGHT - 310, f"Score: {SCORE}")
+        draw_text(10, SCREEN_HEIGHT - 340, f"Enemies Killed: {ENEMIES_KILLED}")
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+
+def handle_reset_game():
+    global CURRENT_HEALTH, NUMBER_OF_PLAYER_BOMBS, PLAYER_BOMB_EXPLOTION_RADIUS
+    global PLAYER_BOMB_DAMAGE, PLAYER_SPEED
+    global ALL_ENEMIES, ALL_BOMBS, PLAYER_BOMB_INDEX
+    global GAME_STATE, CURRENT_WAVE, SCORE, ENEMIES_KILLED
+    global upgrade_options, cursor_pos, player_pos, PLAYER_ANGLE, camera_pos, camera_angle, target_pos
+
+    # Reset player stats
+    CURRENT_HEALTH = MAX_HEALTH
+    NUMBER_OF_PLAYER_BOMBS = MAX_NUMBER_OF_PLAYER_BOMBS
+    PLAYER_BOMB_EXPLOTION_RADIUS = MAX_PLAYER_BOMB_EXPLOTION_RADIUS
+    PLAYER_BOMB_DAMAGE = MAX_BOMB_DAMAGE
+    PLAYER_SPEED = MAX_PLAYER_SPEED
+
+    # Reset game state
+    ALL_ENEMIES.clear()
+    ALL_BOMBS.clear()
+    PLAYER_BOMB_INDEX.clear()
+    GAME_STATE = "main menu"
+    CURRENT_WAVE = 0
+    SCORE = 0
+    ENEMIES_KILLED = 0
+
+    # Reset upgrade options
+    upgrade_options = {
+        "Bomb Number": NUMBER_OF_PLAYER_BOMBS,
+        "Explosion Radius": PLAYER_BOMB_EXPLOTION_RADIUS,
+        "Heal up": CURRENT_HEALTH,
+        "Damage up": PLAYER_BOMB_DAMAGE,
+        "Speed Up": PLAYER_SPEED,
+    }
+    cursor_pos = 0
+    player_pos = [GRID_START_X - TILE_SIZE, GRID_START_Y - TILE_SIZE, 0.0]
+    PLAYER_ANGLE = 0
+    camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
+    camera_angle = 45
+    target_pos = [player_pos[0], player_pos[1], 0]
+
+#=================== Enter on the upgrade ========================
 def slect_and_apply_upgrade():
     # for upgrade system
     global upgrade_options, cursor_pos
@@ -855,7 +1107,7 @@ def slect_and_apply_upgrade():
     global NUMBER_OF_PLAYER_BOMBS, PLAYER_BOMB_EXPLOTION_RADIUS
 
     #player stats
-    global CURRENT_HEALTH
+    global CURRENT_HEALTH, PLAYER_SPEED, PLAYER_BOMB_DAMAGE
 
     selected_option = list(upgrade_options.keys())[cursor_pos]
 
@@ -870,8 +1122,52 @@ def slect_and_apply_upgrade():
         if CURRENT_HEALTH > MAX_HEALTH:
             CURRENT_HEALTH = MAX_HEALTH
         upgrade_options[selected_option] = CURRENT_HEALTH
+    if selected_option == "Damage up":
+        PLAYER_BOMB_DAMAGE += 5
+        upgrade_options[selected_option] = PLAYER_BOMB_DAMAGE
+    if selected_option == "Speed Up":
+        PLAYER_SPEED += 2
+        upgrade_options[selected_option] = PLAYER_SPEED
         
-
+def apply_permanent_upgrade(cursor_pos, gold):
+    if cursor_pos == 0:  # Max Health
+        if gold >= 100:
+            MAX_HEALTH += 20
+            gold -= 100
+            print(f"Bought Max Health upgrade! New max: {MAX_HEALTH}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 1:  # Max Bombs
+        if gold >= 100:
+            NUMBER_OF_PLAYER_BOMBS += 1
+            gold -= 100
+            print(f"Bought Max Bombs upgrade! New max: {NUMBER_OF_PLAYER_BOMBS}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 2:  # Explosion Radius
+        if gold >= 100:
+            PLAYER_BOMB_EXPLOTION_RADIUS += 1
+            gold -= 100
+            print(f"Bought Explosion Radius upgrade! New radius: {PLAYER_BOMB_EXPLOTION_RADIUS}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 3:  # Player Speed
+        if gold >= 100:
+            MAX_PLAYER_SPEED += 10
+            gold -= 100
+            print(f"Bought Player Speed upgrade! New speed: {MAX_PLAYER_SPEED}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 4:  # Bomb Damage
+        if gold >= 100:
+            PLAYER_BOMB_DAMAGE += 10
+            gold -= 100
+            print(f"Bought Bomb Damage upgrade! New damage: {PLAYER_BOMB_DAMAGE}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 5:  # Back
+        GAME_STATE = "main menu"
+        cursor_pos = 0
 
 #=================== Player Model ========================================
 
@@ -1239,9 +1535,9 @@ def delta_time():
 
 def keyboardListener(key, x, y):
     global key_buffer,player_pos, camera_pos,PLAYER_ANGLE,PLAYER_SPEED, CAMERA_THETA, target_pos, POV, GAME_MODE
-    global show_upgrade_menu
+    global show_upgrade_menu, cursor_pos, GAME_STATE
 
-    if show_upgrade_menu == False:
+    if show_upgrade_menu == False and GAME_STATE == "playing":
         if key == b'w':
             if POV == 0:
                 PlayerMovementThirdPerson(PLAYER_SPEED)
@@ -1285,15 +1581,39 @@ def keyboardListener(key, x, y):
         if key == b'f':
             TriggerBomb()
 
+
     if key == b'\r':  #enter
         if show_upgrade_menu:
             slect_and_apply_upgrade()
             show_upgrade_menu = False
-            #Todo: wave_start()
+            cursor_pos = 0
+            wave_start()
+        elif GAME_STATE == "main menu":
+            if cursor_pos == 0:
+                GAME_MODE = 0
+                CURRENT_WAVE = 0
+                wave_start()
+            elif cursor_pos == 1:
+                GAME_MODE = 1
+                wave_start()
+            elif cursor_pos == 2:
+                GAME_STATE = "permanent_shop"
+            elif cursor_pos == 3:
+                GAME_MODE = 2
+                GAME_STATE = "playing"
+            cursor_pos = 0
+        elif GAME_STATE == "permanent_shop":
+            apply_permanent_upgrade(cursor_pos, gold)
+            cursor_pos = 0
+
+        
             
     #temporary
     if key == b'm':
         show_upgrade_menu = not show_upgrade_menu
+    elif key == b'\t':  # Tab
+        global show_stats
+        show_stats = not show_stats
 
 # def keyboardUpListener(key, x, y):
 #     if key == b'w':
@@ -1323,7 +1643,7 @@ def specialKeyListener(key, x, y):
     dy = y - py
     radius = math.sqrt(dx*dx + dy*dy)
 
-    if show_upgrade_menu == False:
+    if show_upgrade_menu == False and GAME_STATE == "playing":
         if GAME_MODE != 2:
 
             #Rotates only when player is in third person and Not in 2 player mode
@@ -1368,9 +1688,19 @@ def specialKeyListener(key, x, y):
         #Move the cursor in menues.
         #up, down
         if key == GLUT_KEY_UP:
-            cursor_pos = (cursor_pos - 1) % len(upgrade_options)
+            if GAME_STATE == "shop":
+                cursor_pos = (cursor_pos - 1) % len(upgrade_options)
+            elif GAME_STATE == "main menu":
+                cursor_pos = (cursor_pos - 1) % 4
+            elif GAME_STATE == "permanent_shop":
+                cursor_pos = (cursor_pos - 1) % 6
         if key == GLUT_KEY_DOWN:
-            cursor_pos = (cursor_pos + 1) % len(upgrade_options)
+            if GAME_STATE == "shop":
+                cursor_pos = (cursor_pos + 1) % len(upgrade_options)
+            elif GAME_STATE == "main menu":
+                cursor_pos = (cursor_pos + 1) % 4
+            elif GAME_STATE == "permanent_shop":
+                cursor_pos = (cursor_pos + 1) % 6
 
 
 # def SpecialKeyUpListener(key, x, y):
@@ -1554,6 +1884,18 @@ def showScreen():
 
     setupCamera()  # Configure camera perspective
     
+    if GAME_STATE == "main menu":
+        draw_main_menu()
+        glutSwapBuffers()
+        return
+    elif GAME_STATE == "permanent_shop":
+        draw_permanent_shop()
+        glutSwapBuffers()
+        return
+    elif GAME_STATE == "game over":
+        draw_game_over()
+        glutSwapBuffers()
+        return
     draw_ground(GRID_COLS)
     
     # Draw the walls 
@@ -1575,6 +1917,8 @@ def showScreen():
     if show_upgrade_menu:
         draw_upgrade_menu()
 
+    draw_hud()
+
     # Swap buffers for smooth rendering (double buffering)
     glutSwapBuffers()
 
@@ -1592,7 +1936,6 @@ def main():
     player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
     game_map[player_row][player_col] = PLAYER_ONE
     
-    spawn_enemies(ENEMIES_PER_WAVE_BASE, ENEMY_SPAWN_MIN_DISTANCE)
     print_game_map()  # Print map to console for debugging
     draw_walls()
     # print(f"ALL_ENEMIES: {ALL_ENEMIES}")
