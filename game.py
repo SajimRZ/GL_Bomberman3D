@@ -143,14 +143,13 @@ ENEMY_PATH_INTERVAL_MIN = 0.15    # Fastest update rate (later waves)
 ENEMY_PATH_SPEEDUP_PER_WAVE = 0.03  # Interval decreases each wave
 
 # Enemy bomb placement
-ENEMY_BOMB_PROXIMITY = 1          # Place bomb if player within X tiles
+ENEMY_BOMB_PROXIMITY = 2          # Place bomb if player within X tiles
 ENEMY_BOMB_COOLDOWN = 3.0         # Seconds between bomb placements
 ENEMY_BOMB_INDEX = []             # Track enemy bombs (like PLAYER_BOMB_INDEX)
 
 # Spawning
 ENEMY_SPAWN_MIN_DISTANCE = 5      # Min tiles away from player to spawn
 ENEMY_SPAWN_DELAY = 1.0           # Delay between each enemy spawn in a wave
-ALL_ENEMIES = []
 
 # All enemies list
 ALL_ENEMIES = []
@@ -465,23 +464,35 @@ def update_enemy_paths():
 def update_enemies(dt):
 
     global ALL_ENEMIES, player_pos, ENEMY_PATH_UPDATE_INTERVAL
+    global ENEMY_BOMB_PROXIMITY, ENEMY_BOMB_COOLDOWN, ENEMY_BOMB_INDEX
     
     player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
     current_time = time.time()
     
     for enemy in ALL_ENEMIES:
+
         if current_time - enemy["last_path_update"] > ENEMY_PATH_UPDATE_INTERVAL or len(enemy["path"]) == 0:
             enemy["path"] = bfs_pathfind(enemy["row"], enemy["col"], player_row, player_col)
             enemy["last_path_update"] = current_time
         
-        # If we have a path, move along it
+        distance_to_player = abs(enemy["row"] - player_row) + abs(enemy["col"] - player_col)
+        
+        if distance_to_player <= ENEMY_BOMB_PROXIMITY:
+            if current_time - enemy["last_bomb_time"] > ENEMY_BOMB_COOLDOWN:
+                if game_map[enemy["row"]][enemy["col"]] != BOMB:
+                    
+                    enemy_world_pos = [enemy["world_x"], enemy["world_y"], 0]
+                    plantBomb(enemy_world_pos, ENEMY_BOMB_INDEX, owner=ENEMY)
+                    enemy["last_bomb_time"] = current_time
+                    print(f"Enemy {enemy['id']} placed a bomb!")
+        
         if len(enemy["path"]) > 0:
             next_row, next_col = enemy["path"][0]
             
-            # Verify next tile is still walkable (bomb might have been placed)
-            tile = game_map[next_row][next_col]
-            if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL, BOMB):
-                # Path blocked! Recalculate immediately
+            
+            tile = game_map[next_row][next_col] # verifying wallakle tile
+            if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL, BOMB):#blcokded so next tile
+                
                 enemy["path"] = bfs_pathfind(enemy["row"], enemy["col"], player_row, player_col)
                 enemy["last_path_update"] = current_time
                 continue
@@ -498,8 +509,8 @@ def plantBomb(position, bombindex, owner=PLAYER_ONE, damage=None, radius=None):
     """
     Plant a bomb at the given position.
     owner: PLAYER_ONE, PLAYER_TWO, or ENEMY
-    damage: Custom damage (defaults to player/enemy damage based on owner)
-    radius: Custom radius (defaults to player/enemy radius based on owner)
+    damage: Custom damage 
+    radius: Custom radius 
     """
     px, py, pz = position
     grid_row, grid_col = world_to_grid(px, py)
@@ -664,14 +675,15 @@ def apply_explosion_damage(affected_tiles, damage, owner):
     """
     Apply damage to tiles affected by explosion.
     Destroys destructible walls and damages players/enemies.
-    damage: Amount of damage this explosion deals
-    owner: Who placed the bomb (PLAYER_ONE, PLAYER_TWO, ENEMY)
+    
+    Damage rules:
+    - Player takes damage from ALL bombs (player and enemy)
+    - Enemies only take damage from PLAYER bombs (not from other enemies)
     """
-    global game_map, CURRENT_HEALTH, player_pos
+    global game_map, CURRENT_HEALTH, player_pos, ALL_ENEMIES, ENEMIES_KILLED
     
     for row, col in affected_tiles:
         tile_type = game_map[row][col]
-        world_x, world_y = grid_to_world(row, col)
         
         # Destroy destructible walls
         if tile_type == DESTRUCTIBLE_WALL:
@@ -683,21 +695,31 @@ def apply_explosion_damage(affected_tiles, damage, owner):
             game_map[row][col] = EMPTY
             # TODO: Could trigger chain reaction here
         
-        # Check if player is on this tile
         player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
         if row == player_row and col == player_col:
-            # Player takes damage (can be from own bomb or enemy bomb)
             CURRENT_HEALTH -= damage
             print(f"Player hit by explosion! Damage: {damage}, Health: {CURRENT_HEALTH}")
             if CURRENT_HEALTH <= 0:
                 print("PLAYER DIED!")
                 # TODO: Handle player death
         
-        # TODO: Check enemies on this tile
-        # for enemy in ALL_ENEMIES:
-        #     if enemy["row"] == row and enemy["col"] == col:
-        #         enemy["health"] -= damage
-        #         print(f"Enemy hit! Damage: {damage}")
+
+        if owner == PLAYER_ONE:  
+            enemies_to_remove = []
+            for i, enemy in enumerate(ALL_ENEMIES):
+                if enemy["row"] == row and enemy["col"] == col:
+                    enemy["health"] -= damage
+                    print(f"Enemy {enemy['id']} hit! Damage: {damage}, Health: {enemy['health']}")
+                    
+                    if enemy["health"] <= 0:
+                        print(f"Enemy {enemy['id']} killed!")
+                        enemies_to_remove.append(i)
+                        ENEMIES_KILLED += 1
+            
+
+            for i in reversed(enemies_to_remove):
+                ALL_ENEMIES.pop(i)
+
 
 
 def update_and_draw_explosions():
@@ -1499,8 +1521,8 @@ def idle():
     if GAME_MODE == 2:
         POV = 1
         
-    # checkAllBombs()
-    # TriggerBomb()
+    # Check bomb timers (auto-explode)
+    checkAllBombs()
     
     # Update enemies (BFS pathfinding + movement)
     update_enemies(dt)
