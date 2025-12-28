@@ -4,6 +4,7 @@ from OpenGL.GLU import *
 import math
 import random
 import time
+from collections import deque
 
 last_time = time.time()
 
@@ -134,7 +135,7 @@ ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration, radius, aff
 
 #------------------------ Enemy stats ------------------------#
 # Base enemy stats
-ENEMY_BASE_SPEED = 80
+ENEMY_BASE_SPEED = 200
 MAX_ENEMY_HP = 50
 ENEMY_BASE_HEALTH = MAX_ENEMY_HP
 ENEMY_BOMB_DAMAGE = DEFAULT_BOMB_DAMAGE
@@ -381,7 +382,124 @@ def print_game_map():
                 line += "E "
         print(line)
     print("================\n")
+
+
+#=================== Pathfinding using bfs =================================
+
+
+def bfs_pathfind(start_row, start_col, target_row, target_col):
+    global game_map, GRID_ROWS, GRID_COLS
     
+    if start_row == target_row and start_col == target_col:
+        return []
+
+    queue = deque()
+    queue.append((start_row, start_col))
+    
+    visited = set()
+    visited.add((start_row, start_col))
+    parent = {}  # parent[(r,c)] = (parent_r, parent_c)
+    
+
+    closest_tile = (start_row, start_col) # closest reachable tile 
+    closest_distance = abs(target_row - start_row) + abs(target_col - start_col)
+
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    
+    while queue:
+        current_row, current_col = queue.popleft()
+        
+        # Check if reached target
+        if current_row == target_row and current_col == target_col:
+
+            path = []
+            r, c = target_row, target_col
+            while (r, c) != (start_row, start_col):
+                path.append((r, c))
+                r, c = parent[(r, c)]
+            path.reverse()
+            return path
+        
+        for dr, dc in directions:
+            new_row = current_row + dr
+            new_col = current_col + dc
+            
+            if not (0 <= new_row < GRID_ROWS and 0 <= new_col < GRID_COLS):
+                continue
+            
+            if (new_row, new_col) in visited:
+                continue
+            
+            tile = game_map[new_row][new_col]
+            if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL, BOMB):
+                continue
+            
+            visited.add((new_row, new_col))
+            parent[(new_row, new_col)] = (current_row, current_col)
+            queue.append((new_row, new_col))
+            
+            dist = abs(target_row - new_row) + abs(target_col - new_col)
+            if dist < closest_distance:
+                closest_distance = dist
+                closest_tile = (new_row, new_col)
+    
+    
+    if closest_tile == (start_row, start_col):
+        return [] # stuck on a wall
+    
+    path = []
+    r, c = closest_tile
+    while (r, c) != (start_row, start_col):
+        path.append((r, c))
+        r, c = parent[(r, c)]
+    path.reverse()
+    return path
+
+
+
+# might use later
+def update_enemy_paths():
+    global ALL_ENEMIES, player_pos
+    
+    player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
+    
+    for enemy in ALL_ENEMIES:
+        enemy["path"] = bfs_pathfind(enemy["row"], enemy["col"], player_row, player_col)
+        enemy["last_path_update"] = time.time()
+
+
+def update_enemies(dt):
+
+    global ALL_ENEMIES, player_pos, ENEMY_PATH_UPDATE_INTERVAL
+    
+    player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
+    current_time = time.time()
+    
+    for enemy in ALL_ENEMIES:
+        if current_time - enemy["last_path_update"] > ENEMY_PATH_UPDATE_INTERVAL or len(enemy["path"]) == 0:
+            enemy["path"] = bfs_pathfind(enemy["row"], enemy["col"], player_row, player_col)
+            enemy["last_path_update"] = current_time
+        
+        # If we have a path, move along it
+        if len(enemy["path"]) > 0:
+            next_row, next_col = enemy["path"][0]
+            
+            # Verify next tile is still walkable (bomb might have been placed)
+            tile = game_map[next_row][next_col]
+            if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL, BOMB):
+                # Path blocked! Recalculate immediately
+                enemy["path"] = bfs_pathfind(enemy["row"], enemy["col"], player_row, player_col)
+                enemy["last_path_update"] = current_time
+                continue
+            
+            # Move towards next tile
+            reached = move_enemy(enemy, next_row, next_col, dt)
+            
+            if reached:
+                # Reached this tile, remove from path
+                enemy["path"].pop(0)
+
+
 def plantBomb(position, bombindex, owner=PLAYER_ONE, damage=None, radius=None):
     """
     Plant a bomb at the given position.
@@ -1404,6 +1522,9 @@ def idle():
         
     # checkAllBombs()
     # TriggerBomb()
+    
+    # Update enemies (BFS pathfinding + movement)
+    update_enemies(dt)
     
     #update player position on map 
     
