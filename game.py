@@ -78,6 +78,7 @@ GAME_MODE = 0 # 0: Wave Survival, 1: Endless, 2: Multiplayer
 # player_pos = [GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0]
 player_pos = [GRID_START_X - TILE_SIZE, GRID_START_Y + TILE_SIZE, 0]
 PLAYER_ANGLE = 0
+PREV_PLAYER_POS = player_pos
 
 POV = 0  # 0: Third-person, 1: Top-down
 if POV == 0:
@@ -104,6 +105,8 @@ target_pos = [player_pos[0], player_pos[1], player_pos[2]]
 
 #map info
 game_map = [[EMPTY for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
+
+
 
 
 #bomb info
@@ -148,11 +151,33 @@ ENEMY_SPAWN_MIN_DISTANCE = 5      # Min tiles away from player to spawn
 ENEMY_SPAWN_DELAY = 1.0           # Delay between each enemy spawn in a wave
 ALL_ENEMIES = []
 
+# All enemies list
+ALL_ENEMIES = []
+# Enemy dictionary structure:
+# {
+#     "id": 1,                      # Unique identifier
+#     "row": 5,                     # Current grid row
+#     "col": 10,                    # Current grid col
+#     "world_x": 0.0,               # World X position (for smooth movement)
+#     "world_y": 0.0,               # World Y position (for smooth movement)
+#     "world_z": 0.0,               # World Z position (for smooth movement)
+#     "angle": 0.0,                 # Angle of the enemy
+#     "health": ENEMY_BASE_HEALTH,  # Current health
+#     "speed": ENEMY_BASE_SPEED,    # Movement speed
+#     "path": [],                   # BFS path: list of (row, col) tuples
+#     "path_index": 0,              # Current index in path
+#     "last_path_update": 0.0,      # Timestamp of last BFS calculation
+#     "last_bomb_time": 0.0,        # Timestamp of last bomb placed
+#     "state": "idle",              # "idle", "moving", "dead"
+
+# }
+ENEMY_ID_COUNTER = 0  # For generating unique enemy IDs
+
 #================== WAVE SYSTEM ==================
 
 CURRENT_WAVE = 0
 WAVE_ACTIVE = False
-ENEMIES_PER_WAVE_BASE = 3
+ENEMIES_PER_WAVE_BASE = 10 # this is used as enemy count for the first wave
 ENEMIES_PER_WAVE_INCREASE = 1     # +1 enemy per wave
 WAVE_DELAY = 3.0                  # Seconds between waves
 WAVE_START_TIME = 0               # When current wave started
@@ -162,7 +187,6 @@ WAVE_START_TIME = 0               # When current wave started
 GAME_STATE = "playing"  # "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop"
 SCORE = 0
 ENEMIES_KILLED = 0
-
 
 #Upgrade Screen info 
 show_upgrade_menu = False
@@ -245,18 +269,96 @@ def get_tile_type(world_x, world_y):
     tile = get_tile_at_position(world_x, world_y)
     return tile
 
+
+def spawn_enemies(num_enemies, min_distance):
+
+    global game_map, player_pos, GRID_ROWS, GRID_COLS
+    global ALL_ENEMIES, ENEMY_ID_COUNTER
+    
+    player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
+    
+    valid_locations = []
+    for row in range(GRID_ROWS):
+        for col in range(GRID_COLS):
+            if game_map[row][col] != EMPTY:
+                continue
+            distance = abs(row - player_row) + abs(col - player_col)
+
+            if distance >= min_distance:
+                valid_locations.append((row, col))
+
+    num_to_spawn = min(num_enemies, len(valid_locations))
+
+    spawn_positions = random.sample(valid_locations, num_to_spawn)
+    
+    for row, col in spawn_positions:
+        world_x, world_y = grid_to_world(row, col)
+        
+        enemy = {
+            "id": ENEMY_ID_COUNTER,
+            "row": row,
+            "col": col,
+            "world_x": world_x,
+            "world_y": world_y,
+            "world_z": 0.0,
+            "angle": 0.0,
+            "health": ENEMY_BASE_HEALTH,
+            "speed": ENEMY_BASE_SPEED,
+            "path": [],
+            "path_index": 0,
+            "last_path_update": 0.0,
+            "last_bomb_time": 0.0,
+            "state": "idle",
+        }
+        
+        ALL_ENEMIES.append(enemy)
+        ENEMY_ID_COUNTER += 1
+    
+    print(f"Spawned {num_to_spawn} enemies")
+    return num_to_spawn
+
+
+def move_enemy(enemy, target_row, target_col, dt):
+    target_x, target_y = grid_to_world(target_row, target_col)
+    current_x = enemy["world_x"]
+    current_y = enemy["world_y"]
+    
+    dx = target_x - current_x
+    dy = target_y - current_y
+
+    distance = math.sqrt(dx * dx + dy * dy)
+    
+    
+    arrival_threshold = 10  
+    if distance < arrival_threshold:
+        # basically snapping to place if the distance is less than 10
+        enemy["world_x"] = target_x
+        enemy["world_y"] = target_y
+        enemy["row"] = target_row
+        enemy["col"] = target_col
+        return True  # Reached target
+
+    target_angle = math.degrees(math.atan2(dx, dy))
+    enemy["angle"] = target_angle
+    
+    dir_x = dx / distance
+    dir_y = dy / distance
+    
+    move_distance = enemy["speed"] * dt
+    
+
+    if move_distance > distance:
+        move_distance = distance
+    
+    enemy["world_x"] += dir_x * move_distance
+    enemy["world_y"] += dir_y * move_distance
+    
+    return False 
+
+
 def print_game_map():
 
     print("\n=== GAME MAP ===")
-    # print(f"Grid size: {GRID_ROWS}x{GRID_COLS}")
-    # print(f"GRID_START: ({GRID_START_X}, {GRID_START_Y})")
-    # print(f"Tile (0,0) at world: {grid_to_world(0, 0)}")
-    # print(f"Tile (0,{GRID_COLS-1}) at world: {grid_to_world(0, GRID_COLS-1)}")
-    # print(f"Tile ({GRID_ROWS-1},0) at world: {grid_to_world(GRID_ROWS-1, 0)}")
-    # print(f"Tile ({GRID_ROWS-1},{GRID_COLS-1}) at world: {grid_to_world(GRID_ROWS-1, GRID_COLS-1)}")
-    # print(f"Boundary walls at: ±{GRID_LENGTH}")
-    # print(f"Edge tile coverage: {GRID_START_X - TILE_SIZE/2} to {GRID_START_X + TILE_SIZE/2}")
-    # print()
     for row in range(GRID_ROWS):
         line = ""
         for col in range(GRID_COLS):
@@ -267,6 +369,10 @@ def print_game_map():
                 line += "# "
             elif tile == DESTRUCTIBLE_WALL:
                 line += "X "
+            elif tile == PLAYER_ONE:
+                line += "P "
+            elif tile == ENEMY:
+                line += "E "
         print(line)
     print("================\n")
     
@@ -301,7 +407,7 @@ def plantBomb(position, bombindex, owner=PLAYER_ONE, damage=None, radius=None):
         print(f"Tile type at ({grid_row}, {grid_col}): {tile_type}")
         print(f"(0=EMPTY, 1=INDESTRUCTIBLE, 2=DESTRUCTIBLE, 3=BOMB)")
 
-        if tile_type == EMPTY:
+        if tile_type in (EMPTY, PLAYER_ONE, ENEMY):
             game_map[grid_row][grid_col] = BOMB
             bomb = {
                 "row": grid_row,
@@ -509,7 +615,7 @@ def update_and_draw_explosions():
             glTranslatef(worldx, worldy, current_sphere_radius)
             
             glColor4f(1.0, 0.5, 0.0, alpha)
-            glutSolidSphere(current_sphere_radius, 20, 20)
+            gluSphere(gluNewQuadric(), current_sphere_radius, 20, 20)
             
             glPopMatrix()
         
@@ -529,7 +635,7 @@ def update_and_draw_explosions():
 #         glPushMatrix()
 #         glTranslatef(worldx, worldy, 0)
 #         glScalef(current_radius, current_radius, current_radius)
-#         glutSolidSphere(current_radius, 20, 20)
+#         gluSphere(gluNewQuadric(), current_radius, 20, 20)
 #         glPopMatrix()
 #         time.sleep(0.01)
 
@@ -644,13 +750,13 @@ def drawPlayer(num=1):
     glPushMatrix()
     glColor3f(*PINK)
     glTranslatef(30,0,0)
-    glutSolidSphere(20,20,20)
+    gluSphere(gluNewQuadric(), 20, 20, 20)
     glPopMatrix()
 
     glPushMatrix()
     glColor3f(*PINK)
     glTranslatef(-30,0,0)
-    glutSolidSphere(20,20,20)
+    gluSphere(gluNewQuadric(), 20, 20, 20)
     glPopMatrix()
     
     #Legs
@@ -786,6 +892,49 @@ def drawBomb(x, y, z):
     glPopMatrix()
 
 
+def drawEnemy(enemy):
+    
+    glPushMatrix()
+    glTranslatef(enemy["world_x"], enemy["world_y"], enemy["world_z"] + 200)
+    glRotatef(-enemy["angle"], 0, 0, 1)
+    glScalef(2,2,2)
+    
+    #body
+    glPushMatrix()
+    # glTranslatef(enemy["world_x"], enemy["world_y"], 0)
+    glColor3f(*RED)
+    glScalef(1,1,1)
+    gluSphere(gluNewQuadric(), 70, 20, 20)
+    glPopMatrix()
+    
+    #white stripe
+    glPushMatrix()
+    glColor3f(*WHITE)
+    gluSphere(gluNewQuadric(), 70, 20, 20)
+    glPopMatrix()
+    
+    #horns
+    glPushMatrix()
+    glColor3f(*WHITE)
+    glTranslatef(40,0,50)
+    glRotatef(30,0,1,0)
+    gluCylinder(gluNewQuadric(), 20, 0.1, 60, 10, 10) # parameters are: quadric, base radius, top radius, height, slices, stacks
+    glPopMatrix()
+    
+    #horns
+    glPushMatrix()
+    glColor3f(*WHITE)
+    glTranslatef(-40,0,50)
+    glRotatef(-30,0,1,0)
+    gluCylinder(gluNewQuadric(), 20, 0.1, 60, 10, 10)
+    glPopMatrix()
+    
+    glPopMatrix()
+    
+def drawAllEnemies():
+    global ALL_ENEMIES
+    for enemy in ALL_ENEMIES:
+        drawEnemy(enemy)
 
 #=================   Player Movement ===============================
 def PlayerMovementThirdPerson(pspeed):
@@ -1131,7 +1280,7 @@ def draw_tiles():
     for row in range(GRID_ROWS):
         for col in range(GRID_COLS):
             tile = game_map[row][col]
-            if tile == EMPTY or tile == BOMB:
+            if tile in (EMPTY, BOMB, PLAYER_ONE, ENEMY):
                 continue
 
             world_x, world_y = grid_to_world(row, col)
@@ -1222,7 +1371,7 @@ def draw_ground(n):
 
 
 def idle():
-    global POV, GAME_MODE
+    global POV, GAME_MODE, PREV_PLAYER_POS, player_pos
     """
     Idle function that runs continuously:
     - Triggers screen redraw for real-time updates.
@@ -1234,16 +1383,25 @@ def idle():
         
     # checkAllBombs()
     # TriggerBomb()
-
+    
+    #update player position on map 
+    
+    grid_row, grid_col = world_to_grid(player_pos[0], player_pos[1])
+    prev_grid_row, prev_grid_col = world_to_grid(PREV_PLAYER_POS[0], PREV_PLAYER_POS[1])
+    
+    if grid_row != prev_grid_row or grid_col != prev_grid_col:
+        game_map[prev_grid_row][prev_grid_col] = EMPTY
+        game_map[grid_row][grid_col] = PLAYER_ONE
+        PREV_PLAYER_POS = player_pos
+        # print(f"Player position: {player_pos}")
+    else:
+        grid_row, grid_col = world_to_grid(player_pos[0], player_pos[1])
+        game_map[grid_row][grid_col] = PLAYER_ONE
+        # print(f"Player position: grid({grid_row}, {grid_col})")
 
     glutPostRedisplay()
 
 def showScreen():
-    """
-    Display function to render the game scene:
-    - Clears the screen and sets up the camera.
-    - Draws everything of the screen
-    """
     # Clear color and depth buffers
     glClearColor(*BLACK, 1.0)
     glEnable(GL_DEPTH_TEST)
@@ -1257,6 +1415,10 @@ def showScreen():
     
     # Draw the walls 
     draw_tiles()
+    
+    # Draw all enemies
+    drawAllEnemies()
+    
 
     #Draw the player
     # drawBomb(GRID_LENGTH - TILE_SIZE, -GRID_LENGTH + TILE_SIZE, 0, )
@@ -1284,8 +1446,13 @@ def main():
     
     # Initialize the game map
     initialize_game_map()
+    player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
+    game_map[player_row][player_col] = PLAYER_ONE
+    
+    spawn_enemies(ENEMIES_PER_WAVE_BASE, ENEMY_SPAWN_MIN_DISTANCE)
     print_game_map()  # Print map to console for debugging
     draw_walls()
+    # print(f"ALL_ENEMIES: {ALL_ENEMIES}")
 
     glutDisplayFunc(showScreen)  # Register display function
     glutKeyboardFunc(keyboardListener)  # Register keyboard listener
