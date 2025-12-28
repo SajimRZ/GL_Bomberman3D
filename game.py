@@ -181,7 +181,7 @@ ENEMY_ID_COUNTER = 0  # For generating unique enemy IDs
 
 CURRENT_WAVE = 0
 WAVE_ACTIVE = False
-ENEMIES_PER_WAVE_BASE = 1 # this is used as enemy count for the first wave
+ENEMIES_PER_WAVE_BASE = 5 # this is used as enemy count for the first wave
 ENEMIES_PER_WAVE_INCREASE = 1     # +1 enemy per wave
 ENEMIES_IN_ENDLESS = 0
 WAVE_DELAY = 3.0                  # Seconds between waves
@@ -736,6 +736,7 @@ def apply_explosion_damage(affected_tiles, damage, owner):
                 ALL_ENEMIES.pop(i)
             
             if GAME_MODE == 1 and len(ALL_ENEMIES) < ENEMIES_IN_ENDLESS:
+                ENEMY_BASE_HEALTH += 5
                 spawned = spawn_enemies(1, ENEMY_SPAWN_MIN_DISTANCE)
                 print(f"Spawned {spawned} replacement enemy in endless mode!")
 
@@ -824,13 +825,13 @@ def end_wave_todo():
     GAME_STATE = "shop"
 
 def wave_start():
-    global GAME_STATE, WAVE_ACTIVE, CURRENT_WAVE, WAVE_START_TIME, ENEMIES_IN_ENDLESS
+    global GAME_STATE, WAVE_ACTIVE, CURRENT_WAVE, WAVE_START_TIME, ENEMIES_IN_ENDLESS, ENEMY_BASE_HEALTH
 
     CURRENT_WAVE += 1
     WAVE_ACTIVE = True
     WAVE_START_TIME = time.time()
     GAME_STATE = "playing"
-    
+    ENEMY_BASE_HEALTH += 10
     num_enemies = ENEMIES_PER_WAVE_BASE + (CURRENT_WAVE - 1) * ENEMIES_PER_WAVE_INCREASE
     if GAME_MODE == 1:  # Endless mode
         ENEMIES_IN_ENDLESS = num_enemies
@@ -1064,10 +1065,11 @@ def handle_reset_game():
     global CURRENT_HEALTH, NUMBER_OF_PLAYER_BOMBS, PLAYER_BOMB_EXPLOTION_RADIUS
     global PLAYER_BOMB_DAMAGE, PLAYER_SPEED
     global ALL_ENEMIES, ALL_BOMBS, PLAYER_BOMB_INDEX
-    global GAME_STATE, CURRENT_WAVE, SCORE, ENEMIES_KILLED
+    global GAME_STATE, CURRENT_WAVE, SCORE, ENEMIES_KILLED, gold, WIN
     global upgrade_options, cursor_pos, player_pos, PLAYER_ANGLE, camera_pos, camera_angle, target_pos
+    global show_upgrade_menu, show_stats
 
-    # Reset player stats
+    # Reset player stats to current max values (keep max_ variables unchanged)
     CURRENT_HEALTH = MAX_HEALTH
     NUMBER_OF_PLAYER_BOMBS = MAX_NUMBER_OF_PLAYER_BOMBS
     PLAYER_BOMB_EXPLOTION_RADIUS = MAX_PLAYER_BOMB_EXPLOTION_RADIUS
@@ -1082,6 +1084,7 @@ def handle_reset_game():
     CURRENT_WAVE = 0
     SCORE = 0
     ENEMIES_KILLED = 0
+    WIN = False
 
     # Reset upgrade options
     upgrade_options = {
@@ -1092,6 +1095,8 @@ def handle_reset_game():
         "Speed Up": PLAYER_SPEED,
     }
     cursor_pos = 0
+    show_upgrade_menu = False
+    show_stats = False
     player_pos = [GRID_START_X - TILE_SIZE, GRID_START_Y - TILE_SIZE, 0.0]
     PLAYER_ANGLE = 0
     camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
@@ -1596,6 +1601,7 @@ def keyboardListener(key, x, y):
                 wave_start()
             elif cursor_pos == 1:
                 GAME_MODE = 1
+                ENEMIES_PER_WAVE_BASE = 15
                 wave_start()
             elif cursor_pos == 2:
                 GAME_STATE = "permanent_shop"
