@@ -143,7 +143,7 @@ ENEMY_PATH_INTERVAL_MIN = 0.15    # Fastest update rate (later waves)
 ENEMY_PATH_SPEEDUP_PER_WAVE = 0.03  # Interval decreases each wave
 
 # Enemy bomb placement
-ENEMY_BOMB_PROXIMITY = 1          # Place bomb if player within X tiles
+ENEMY_BOMB_PROXIMITY = 2          # Place bomb if player within X tiles
 ENEMY_BOMB_COOLDOWN = 3.0         # Seconds between bomb placements
 ENEMY_BOMB_INDEX = []             # Track enemy bombs (like PLAYER_BOMB_INDEX)
 
@@ -465,23 +465,35 @@ def update_enemy_paths():
 def update_enemies(dt):
 
     global ALL_ENEMIES, player_pos, ENEMY_PATH_UPDATE_INTERVAL
+    global ENEMY_BOMB_PROXIMITY, ENEMY_BOMB_COOLDOWN, ENEMY_BOMB_INDEX
     
     player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
     current_time = time.time()
     
     for enemy in ALL_ENEMIES:
+
         if current_time - enemy["last_path_update"] > ENEMY_PATH_UPDATE_INTERVAL or len(enemy["path"]) == 0:
             enemy["path"] = bfs_pathfind(enemy["row"], enemy["col"], player_row, player_col)
             enemy["last_path_update"] = current_time
         
-        # If we have a path, move along it
+        distance_to_player = abs(enemy["row"] - player_row) + abs(enemy["col"] - player_col)
+        
+        if distance_to_player <= ENEMY_BOMB_PROXIMITY:
+            if current_time - enemy["last_bomb_time"] > ENEMY_BOMB_COOLDOWN:
+                if game_map[enemy["row"]][enemy["col"]] != BOMB:
+                    
+                    enemy_world_pos = [enemy["world_x"], enemy["world_y"], 0]
+                    plantBomb(enemy_world_pos, ENEMY_BOMB_INDEX, owner=ENEMY)
+                    enemy["last_bomb_time"] = current_time
+                    print(f"Enemy {enemy['id']} placed a bomb!")
+        
         if len(enemy["path"]) > 0:
             next_row, next_col = enemy["path"][0]
             
-            # Verify next tile is still walkable (bomb might have been placed)
-            tile = game_map[next_row][next_col]
-            if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL, BOMB):
-                # Path blocked! Recalculate immediately
+            
+            tile = game_map[next_row][next_col] # verifying wallakle tile
+            if tile in (INDESTRUCTIBLE_WALL, DESTRUCTIBLE_WALL, BOMB):#blcokded so next tile
+                
                 enemy["path"] = bfs_pathfind(enemy["row"], enemy["col"], player_row, player_col)
                 enemy["last_path_update"] = current_time
                 continue
@@ -1510,8 +1522,8 @@ def idle():
     if GAME_MODE == 2:
         POV = 1
         
-    # checkAllBombs()
-    # TriggerBomb()
+    # Check bomb timers (auto-explode)
+    checkAllBombs()
     
     # Update enemies (BFS pathfinding + movement)
     update_enemies(dt)
