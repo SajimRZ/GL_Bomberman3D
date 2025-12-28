@@ -498,8 +498,8 @@ def plantBomb(position, bombindex, owner=PLAYER_ONE, damage=None, radius=None):
     """
     Plant a bomb at the given position.
     owner: PLAYER_ONE, PLAYER_TWO, or ENEMY
-    damage: Custom damage (defaults to player/enemy damage based on owner)
-    radius: Custom radius (defaults to player/enemy radius based on owner)
+    damage: Custom damage 
+    radius: Custom radius 
     """
     px, py, pz = position
     grid_row, grid_col = world_to_grid(px, py)
@@ -664,14 +664,15 @@ def apply_explosion_damage(affected_tiles, damage, owner):
     """
     Apply damage to tiles affected by explosion.
     Destroys destructible walls and damages players/enemies.
-    damage: Amount of damage this explosion deals
-    owner: Who placed the bomb (PLAYER_ONE, PLAYER_TWO, ENEMY)
+    
+    Damage rules:
+    - Player takes damage from ALL bombs (player and enemy)
+    - Enemies only take damage from PLAYER bombs (not from other enemies)
     """
-    global game_map, CURRENT_HEALTH, player_pos
+    global game_map, CURRENT_HEALTH, player_pos, ALL_ENEMIES, ENEMIES_KILLED
     
     for row, col in affected_tiles:
         tile_type = game_map[row][col]
-        world_x, world_y = grid_to_world(row, col)
         
         # Destroy destructible walls
         if tile_type == DESTRUCTIBLE_WALL:
@@ -683,21 +684,31 @@ def apply_explosion_damage(affected_tiles, damage, owner):
             game_map[row][col] = EMPTY
             # TODO: Could trigger chain reaction here
         
-        # Check if player is on this tile
         player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
         if row == player_row and col == player_col:
-            # Player takes damage (can be from own bomb or enemy bomb)
             CURRENT_HEALTH -= damage
             print(f"Player hit by explosion! Damage: {damage}, Health: {CURRENT_HEALTH}")
             if CURRENT_HEALTH <= 0:
                 print("PLAYER DIED!")
                 # TODO: Handle player death
         
-        # TODO: Check enemies on this tile
-        # for enemy in ALL_ENEMIES:
-        #     if enemy["row"] == row and enemy["col"] == col:
-        #         enemy["health"] -= damage
-        #         print(f"Enemy hit! Damage: {damage}")
+
+        if owner == PLAYER_ONE:  
+            enemies_to_remove = []
+            for i, enemy in enumerate(ALL_ENEMIES):
+                if enemy["row"] == row and enemy["col"] == col:
+                    enemy["health"] -= damage
+                    print(f"Enemy {enemy['id']} hit! Damage: {damage}, Health: {enemy['health']}")
+                    
+                    if enemy["health"] <= 0:
+                        print(f"Enemy {enemy['id']} killed!")
+                        enemies_to_remove.append(i)
+                        ENEMIES_KILLED += 1
+            
+
+            for i in reversed(enemies_to_remove):
+                ALL_ENEMIES.pop(i)
+
 
 
 def update_and_draw_explosions():
