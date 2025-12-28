@@ -189,7 +189,7 @@ WAVE_START_TIME = 0               # When current wave started
 
 #================== GAME STATE ==================
 
-GAME_STATE = "main menu"  # "main menu", "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop", "permanent_shop", "end scn"
+GAME_STATE = "main menu"  # "main menu", "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop", "permanent_shop", "game over"
 SCORE = 0
 WIN = False
 gold = 0
@@ -1564,9 +1564,10 @@ def keyboardListener(key, x, y):
                 PlayerMovementTopDown(PLAYER_SPEED, 0, 90)
 
         if key == b'e':
-            if GAME_MODE == 0:
+            if GAME_MODE != 2:
                 if POV == 1:
                     camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
+                    target_pos = [player_pos[0], player_pos[1], player_pos[2]]
                 else:
                     camera_pos = [0, 500, 6500]
                     target_pos = [0, 500, 0]
@@ -1605,12 +1606,15 @@ def keyboardListener(key, x, y):
         elif GAME_STATE == "permanent_shop":
             apply_permanent_upgrade(cursor_pos, gold)
             cursor_pos = 0
+        elif GAME_STATE == "game over":
+            handle_reset_game()
 
         
             
     #temporary
     if key == b'm':
         show_upgrade_menu = not show_upgrade_menu
+
     elif key == b'\t':  # Tab
         global show_stats
         show_stats = not show_stats
