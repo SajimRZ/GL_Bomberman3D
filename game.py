@@ -150,7 +150,6 @@ ENEMY_BOMB_INDEX = []             # Track enemy bombs (like PLAYER_BOMB_INDEX)
 # Spawning
 ENEMY_SPAWN_MIN_DISTANCE = 5      # Min tiles away from player to spawn
 ENEMY_SPAWN_DELAY = 1.0           # Delay between each enemy spawn in a wave
-ALL_ENEMIES = []
 
 # All enemies list
 ALL_ENEMIES = []
