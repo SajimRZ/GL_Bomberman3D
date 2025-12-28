@@ -190,8 +190,10 @@ WAVE_START_TIME = 0               # When current wave started
 
 #================== GAME STATE ==================
 
-GAME_STATE = "main menu"  # "main menu", "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop", "end scn"
+GAME_STATE = "main menu"  # "main menu", "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop", "permanent_shop", "end scn"
 SCORE = 0
+WIN = False
+gold = 0
 ENEMIES_KILLED = 0
 
 #Upgrade Screen info 
@@ -698,6 +700,7 @@ def apply_explosion_damage(affected_tiles, damage, owner):
             print(f"Player hit by explosion! Damage: {damage}, Health: {CURRENT_HEALTH}")
             if CURRENT_HEALTH <= 0:
                 print("PLAYER DIED!")
+                WIN = False
                 GAME_STATE = "game over"
         
         # TODO: Check enemies on this tile
@@ -772,13 +775,18 @@ def update_and_draw_explosions():
 
 
 def check_wave_complete():
-    global GAME_STATE, ALL_ENEMIES, CURRENT_WAVE, WAVE_ACTIVE, WAVE_START_TIME, GAME_MODE
+    global GAME_STATE, ALL_ENEMIES, CURRENT_WAVE, WAVE_ACTIVE, WAVE_START_TIME, GAME_MODE, WIN
 
     if WAVE_ACTIVE and len(ALL_ENEMIES) == 0 and GAME_MODE != 1:  # Not endless
         WAVE_ACTIVE = False
-        GAME_STATE = "wave_complete"
-        print(f"Wave {CURRENT_WAVE} complete!")
-        end_wave_todo()
+        if CURRENT_WAVE >= 10:  # Win condition
+            WIN = True
+            GAME_STATE = "game over"
+            print("You won the game!")
+        else:
+            GAME_STATE = "wave_complete"
+            print(f"Wave {CURRENT_WAVE} complete!")
+            end_wave_todo()
 
 def end_wave_todo():
     global show_upgrade_menu, GAME_STATE, WAVE_START_TIME
@@ -895,10 +903,65 @@ def draw_main_menu():
     glMatrixMode(GL_MODELVIEW)
 
 
+def draw_permanent_shop():
+    """
+    Draws the permanent shop for upgrading max stats.
+    """
+    global cursor_pos, gold
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+
+    # Draw background
+    glColor4f(0.1, 0.1, 0.1, 1.0)  # Dark gray
+    glBegin(GL_QUADS)
+    glVertex2f(0, 0)
+    glVertex2f(SCREEN_WIDTH, 0)
+    glVertex2f(SCREEN_WIDTH, SCREEN_HEIGHT)
+    glVertex2f(0, SCREEN_HEIGHT)
+    glEnd()
+
+    glClear(GL_DEPTH_BUFFER_BIT)
+
+    # Title
+    draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 200, "Permanent Upgrades")
+    draw_text(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 250, f"Gold: {gold}")
+
+    # Shop options
+    shop_options = [
+        f"Increase Max Health (100 gold) - Current: {MAX_HEALTH}",
+        f"Increase Max Bombs (100 gold) - Current: {NUMBER_OF_PLAYER_BOMBS}",
+        f"Increase Explosion Radius (100 gold) - Current: {PLAYER_BOMB_EXPLOTION_RADIUS}",
+        f"Increase Player Speed (100 gold) - Current: {MAX_PLAYER_SPEED}",
+        f"Increase Bomb Damage (100 gold) - Current: {PLAYER_BOMB_DAMAGE}",
+        "Back to Main Menu"
+    ]
+    for i, option in enumerate(shop_options):
+        if i == cursor_pos:
+            prefix = "> "
+        else:
+            prefix = "  "
+        y_pos = SCREEN_HEIGHT // 2 - i * 40
+        glColor3f(1, 1, 0) if i == cursor_pos else glColor3f(1, 1, 1)
+        txt = prefix + option
+        draw_text(SCREEN_WIDTH // 2 - 250, y_pos, txt)
+
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+
 def draw_game_over():
     """
     Draws the game over screen with the player's progress.
     """
+    global WIN, gold, CURRENT_WAVE, GAME_MODE
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
@@ -919,8 +982,17 @@ def draw_game_over():
 
     glClear(GL_DEPTH_BUFFER_BIT)
 
+    # Add gold if in wave mode
+    if GAME_MODE == 0:
+        gold_earned = CURRENT_WAVE * 10
+        gold += gold_earned
+        print(f"Earned {gold_earned} gold! Total gold: {gold}")
+
     # Game over message
-    draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50, "Game Over")
+    if WIN:
+        draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50, "You Win!")
+    else:
+        draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50, "Game Over")
     draw_text(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2, f"Score: {SCORE}, Waves Cleared: {CURRENT_WAVE}")
     draw_text(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 50, f"Gold Earned: {CURRENT_WAVE * 10}")
     draw_text(SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, "Press Enter to Return to Main Menu")
@@ -1000,7 +1072,45 @@ def slect_and_apply_upgrade():
         PLAYER_SPEED += 2
         upgrade_options[selected_option] = PLAYER_SPEED
         
-
+def apply_permanent_upgrade(cursor_pos, gold):
+    if cursor_pos == 0:  # Max Health
+        if gold >= 100:
+            MAX_HEALTH += 20
+            gold -= 100
+            print(f"Bought Max Health upgrade! New max: {MAX_HEALTH}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 1:  # Max Bombs
+        if gold >= 100:
+            NUMBER_OF_PLAYER_BOMBS += 1
+            gold -= 100
+            print(f"Bought Max Bombs upgrade! New max: {NUMBER_OF_PLAYER_BOMBS}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 2:  # Explosion Radius
+        if gold >= 100:
+            PLAYER_BOMB_EXPLOTION_RADIUS += 1
+            gold -= 100
+            print(f"Bought Explosion Radius upgrade! New radius: {PLAYER_BOMB_EXPLOTION_RADIUS}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 3:  # Player Speed
+        if gold >= 100:
+            MAX_PLAYER_SPEED += 10
+            gold -= 100
+            print(f"Bought Player Speed upgrade! New speed: {MAX_PLAYER_SPEED}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 4:  # Bomb Damage
+        if gold >= 100:
+            PLAYER_BOMB_DAMAGE += 10
+            gold -= 100
+            print(f"Bought Bomb Damage upgrade! New damage: {PLAYER_BOMB_DAMAGE}")
+        else:
+            print("Not enough gold!")
+    elif cursor_pos == 5:  # Back
+        GAME_STATE = "main menu"
+        cursor_pos = 0
 
 #=================== Player Model ========================================
 
@@ -1414,6 +1524,7 @@ def keyboardListener(key, x, y):
         if key == b'f':
             TriggerBomb()
 
+
     if key == b'\r':  #enter
         if show_upgrade_menu:
             slect_and_apply_upgrade()
@@ -1428,15 +1539,13 @@ def keyboardListener(key, x, y):
                 GAME_MODE = 1
                 wave_start()
             elif cursor_pos == 2:
-                GAME_STATE = "shop"
-                #todo: perma_upgrades()
+                GAME_STATE = "permanent_shop"
             elif cursor_pos == 3:
                 GAME_MODE = 2
                 GAME_STATE = "playing"
             cursor_pos = 0
-        elif GAME_STATE == "game over":
-            GAME_STATE = "main menu"
-            handle_reset_game()
+        elif GAME_STATE == "permanent_shop":
+            apply_permanent_upgrade(cursor_pos, gold)
             cursor_pos = 0
 
         
@@ -1520,13 +1629,17 @@ def specialKeyListener(key, x, y):
         if key == GLUT_KEY_UP:
             if GAME_STATE == "shop":
                 cursor_pos = (cursor_pos - 1) % len(upgrade_options)
-            else:
+            elif GAME_STATE == "main menu":
                 cursor_pos = (cursor_pos - 1) % 4
+            elif GAME_STATE == "permanent_shop":
+                cursor_pos = (cursor_pos - 1) % 6
         if key == GLUT_KEY_DOWN:
             if GAME_STATE == "shop":
                 cursor_pos = (cursor_pos + 1) % len(upgrade_options)
-            else:
+            elif GAME_STATE == "main menu":
                 cursor_pos = (cursor_pos + 1) % 4
+            elif GAME_STATE == "permanent_shop":
+                cursor_pos = (cursor_pos + 1) % 6
 
 
 # def SpecialKeyUpListener(key, x, y):
@@ -1712,6 +1825,10 @@ def showScreen():
     
     if GAME_STATE == "main menu":
         draw_main_menu()
+        glutSwapBuffers()
+        return
+    elif GAME_STATE == "permanent_shop":
+        draw_permanent_shop()
         glutSwapBuffers()
         return
     elif GAME_STATE == "game over":
