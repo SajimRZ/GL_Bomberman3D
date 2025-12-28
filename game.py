@@ -63,6 +63,7 @@ INDESTRUCTIBLE_WALL = 1
 DESTRUCTIBLE_WALL = 2
 BOMB = 3
 PLAYER_ONE = 4
+PLAYER_TWO = 6
 ENEMY = 5
 
 #grid info
@@ -130,8 +131,11 @@ MAX_NUMBER_OF_PLAYER_BOMBS = 2
 NUMBER_OF_PLAYER_BOMBS = MAX_NUMBER_OF_PLAYER_BOMBS  #===Upgradable========
 
 PLAYER_BOMB_INDEX = [] #index of the bombs in ALL_BOMBS
+PLAYER_TWO_BOMB_INDEX = [] #index of the bombs in ALL_BOMBS for player two
 PLAYER_BOMB_EXPLOTION_TIME = 1
 ACTIVE_EXPLOSIONS = []  # [grid_row, grid_col, start_time, duration, radius, affected_tiles]
+
+CHEAT_MODE = False
 
 #------------------------ Enemy stats ------------------------#
 # Base enemy stats
@@ -529,6 +533,8 @@ def plantBomb(position, bombindex, owner=PLAYER_ONE, damage=None, radius=None):
     if damage is None:
         if owner == PLAYER_ONE:
             damage = PLAYER_BOMB_DAMAGE
+        elif owner == PLAYER_TWO:
+            damage = PLAYER_BOMB_DAMAGE
         elif owner == ENEMY:
             damage = ENEMY_BOMB_DAMAGE
         else:
@@ -537,8 +543,14 @@ def plantBomb(position, bombindex, owner=PLAYER_ONE, damage=None, radius=None):
     if radius is None:
         if owner == PLAYER_ONE:
             radius = PLAYER_BOMB_EXPLOTION_RADIUS
+        elif owner == PLAYER_TWO:
+            radius = PLAYER_BOMB_EXPLOTION_RADIUS
         else:
             radius = DEFAULT_EXPLOTION_RADIUS
+
+    # Cheat mode override
+    if owner == PLAYER_ONE and CHEAT_MODE:
+        damage = 9999
 
     # Check bounds
     if 0 <= grid_row < GRID_ROWS and 0 <= grid_col < GRID_COLS:
@@ -585,7 +597,7 @@ def TriggerBomb():
         print("No bombs to trigger")
         
 def checkAllBombs():
-    global ALL_BOMBS, PLAYER_BOMB_INDEX, game_map
+    global ALL_BOMBS, PLAYER_BOMB_INDEX, game_map, PLAYER_TWO_BOMB_INDEX
     time_now = time.time()
     
     i = len(ALL_BOMBS) - 1
@@ -608,7 +620,10 @@ def checkAllBombs():
             
             if i in PLAYER_BOMB_INDEX:
                 PLAYER_BOMB_INDEX.remove(i)
+            if i in PLAYER_TWO_BOMB_INDEX:
+                PLAYER_TWO_BOMB_INDEX.remove(i)
             PLAYER_BOMB_INDEX = [idx - 1 if idx > i else idx for idx in PLAYER_BOMB_INDEX]
+            PLAYER_TWO_BOMB_INDEX = [idx - 1 if idx > i else idx for idx in PLAYER_TWO_BOMB_INDEX]
         i -= 1
 
 
@@ -707,17 +722,25 @@ def apply_explosion_damage(affected_tiles, damage, owner):
         
         player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
         if row == player_row and col == player_col:
-            CURRENT_HEALTH -= damage
-            print(f"Player hit by explosion! Damage: {damage}, Health: {CURRENT_HEALTH}")
-            if CURRENT_HEALTH <= 0:
-                print("PLAYER DIED!")
-                WIN = False
-                GAME_STATE = "game over"
-                if GAME_MODE == 0:
-                    gold_earned = CURRENT_WAVE * 10
-                    gold += gold_earned
-                    print(f"Earned {gold_earned} gold! Total gold: {gold}")
+            if not CHEAT_MODE:
+                CURRENT_HEALTH -= damage
+                print(f"Player hit by explosion! Damage: {damage}, Health: {CURRENT_HEALTH}")
+                if CURRENT_HEALTH <= 0:
+                    print("PLAYER DIED!")
+                    WIN = False
+                    GAME_STATE = "game over"
+                    if GAME_MODE == 0:
+                        gold_earned = CURRENT_WAVE * 10
+                        gold += gold_earned
+                        print(f"Earned {gold_earned} gold! Total gold: {gold}")
+            else:
+                print(f"Cheat mode: Player immune to damage! Would have taken {damage}")
         
+        if GAME_MODE == 2:
+            player_two_row, player_two_col = world_to_grid(player_two_pos[0], player_two_pos[1])
+            if row == player_two_row and col == player_two_col:
+                print(f"Player two hit by explosion! Damage: {damage}")
+                # TODO: Handle player two death if needed
 
         if owner == PLAYER_ONE:  
             enemies_to_remove = []
@@ -803,7 +826,7 @@ def update_and_draw_explosions():
 def check_wave_complete():
     global GAME_STATE, ALL_ENEMIES, CURRENT_WAVE, WAVE_ACTIVE, WAVE_START_TIME, GAME_MODE, WIN
 
-    if WAVE_ACTIVE and len(ALL_ENEMIES) == 0 and GAME_MODE != 1:  # Not endless
+    if WAVE_ACTIVE and len(ALL_ENEMIES) == 0 and GAME_MODE != 1 and GAME_STATE == "playing":  # Not endless and currently playing
         WAVE_ACTIVE = False
         if CURRENT_WAVE >= 10:  # Win condition
             WIN = True
@@ -1054,6 +1077,7 @@ def draw_hud():
         draw_text(10, SCREEN_HEIGHT - 280, f"Wave: {CURRENT_WAVE}")
         draw_text(10, SCREEN_HEIGHT - 310, f"Score: {SCORE}")
         draw_text(10, SCREEN_HEIGHT - 340, f"Enemies Killed: {ENEMIES_KILLED}")
+        draw_text(10, SCREEN_HEIGHT - 370, f"Cheat Mode: {'ON' if CHEAT_MODE else 'OFF'}")
 
     glPopMatrix()
     glMatrixMode(GL_PROJECTION)
@@ -1067,7 +1091,7 @@ def handle_reset_game():
     global ALL_ENEMIES, ALL_BOMBS, PLAYER_BOMB_INDEX
     global GAME_STATE, CURRENT_WAVE, SCORE, ENEMIES_KILLED, gold, WIN
     global upgrade_options, cursor_pos, player_pos, PLAYER_ANGLE, camera_pos, camera_angle, target_pos
-    global show_upgrade_menu, show_stats
+    global show_upgrade_menu, show_stats, GAME_MODE, ENEMIES_PER_WAVE_BASE, POV, game_map, PREV_PLAYER_POS, CHEAT_MODE
 
     # Reset player stats to current max values (keep max_ variables unchanged)
     CURRENT_HEALTH = MAX_HEALTH
@@ -1080,16 +1104,22 @@ def handle_reset_game():
     ALL_ENEMIES.clear()
     ALL_BOMBS.clear()
     PLAYER_BOMB_INDEX.clear()
+    PLAYER_TWO_BOMB_INDEX.clear()
     GAME_STATE = "main menu"
     CURRENT_WAVE = 0
     SCORE = 0
     ENEMIES_KILLED = 0
+    gold = 0  # Reset gold earned this game
     WIN = False
+    GAME_MODE = 0  # Reset to wave survival
+    ENEMIES_PER_WAVE_BASE = 5  # Reset base enemies
+    POV = 0  # Reset POV
+    CHEAT_MODE = False  # Reset cheat mode
 
     # Reset upgrade options
     upgrade_options = {
         "Bomb Number": NUMBER_OF_PLAYER_BOMBS,
-        "Explosion Radius": PLAYER_BOMB_EXPLOTION_RADIUS,
+        "Explosion1 Radius": PLAYER_BOMB_EXPLOTION_RADIUS,
         "Heal up": CURRENT_HEALTH,
         "Damage up": PLAYER_BOMB_DAMAGE,
         "Speed Up": PLAYER_SPEED,
@@ -1097,11 +1127,19 @@ def handle_reset_game():
     cursor_pos = 0
     show_upgrade_menu = False
     show_stats = False
-    player_pos = [GRID_START_X - TILE_SIZE, GRID_START_Y - TILE_SIZE, 0.0]
+    player_pos = [GRID_START_X - TILE_SIZE, GRID_START_Y + TILE_SIZE, 0]
     PLAYER_ANGLE = 0
     camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
     camera_angle = 45
     target_pos = [player_pos[0], player_pos[1], 0]
+
+    # Generate new map
+    initialize_game_map()
+    
+    # Set player position on new map
+    player_row, player_col = world_to_grid(player_pos[0], player_pos[1])
+    game_map[player_row][player_col] = PLAYER_ONE
+    PREV_PLAYER_POS = player_pos
 
 #=================== Enter on the upgrade ========================
 def select_and_apply_upgrade():
@@ -1134,7 +1172,8 @@ def select_and_apply_upgrade():
         PLAYER_SPEED += 2
         upgrade_options[selected_option] = PLAYER_SPEED
         
-def apply_permanent_upgrade(cursor_pos, gold):
+def apply_permanent_upgrade(cursor_pos):
+    global gold, GAME_STATE  # Make gold and GAME_STATE global
     if cursor_pos == 0:  # Max Health
         if gold >= 100:
             MAX_HEALTH += 20
@@ -1172,7 +1211,6 @@ def apply_permanent_upgrade(cursor_pos, gold):
             print("Not enough gold!")
     elif cursor_pos == 5:  # Back
         GAME_STATE = "main menu"
-        cursor_pos = 0
 
 #=================== Player Model ========================================
 
@@ -1587,6 +1625,34 @@ def keyboardListener(key, x, y):
         if key == b'f':
             TriggerBomb()
 
+        if key == b'0' and GAME_MODE == 2:
+            if len(PLAYER_TWO_BOMB_INDEX) < NUMBER_OF_PLAYER_BOMBS:
+                plantBomb(player_two_pos, PLAYER_TWO_BOMB_INDEX, owner=PLAYER_TWO)
+            else:
+                print("Player two has reached the bomb limit")
+        
+        if key == b'1' and GAME_MODE == 2:
+            if len(PLAYER_TWO_BOMB_INDEX) > 0:
+                last_bomb_index = PLAYER_TWO_BOMB_INDEX[-1]
+                bomb = ALL_BOMBS[last_bomb_index]
+                start_explosion_animation(
+                    bomb["row"], bomb["col"], 
+                    PLAYER_BOMB_EXPLOTION_TIME, 
+                    bomb["radius"], 
+                    bomb["damage"],
+                    bomb["owner"]
+                )
+                game_map[bomb["row"]][bomb["col"]] = EMPTY
+                ALL_BOMBS.pop(last_bomb_index)
+                PLAYER_TWO_BOMB_INDEX.pop()
+            else:
+                print("No bombs to trigger for player two")
+
+        if key == b'c':
+            global CHEAT_MODE
+            CHEAT_MODE = not CHEAT_MODE
+            print(f"Cheat mode {'ON' if CHEAT_MODE else 'OFF'}")
+
 
     if key == b'\r':  #enter
         if show_upgrade_menu:
@@ -1610,7 +1676,7 @@ def keyboardListener(key, x, y):
                 GAME_STATE = "playing"
             cursor_pos = 0
         elif GAME_STATE == "permanent_shop":
-            apply_permanent_upgrade(cursor_pos, gold)
+            apply_permanent_upgrade(cursor_pos)
             cursor_pos = 0
         elif GAME_STATE == "game over":
             handle_reset_game()
