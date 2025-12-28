@@ -146,6 +146,7 @@ ENEMY_BOMB_INDEX = []             # Track enemy bombs (like PLAYER_BOMB_INDEX)
 # Spawning
 ENEMY_SPAWN_MIN_DISTANCE = 5      # Min tiles away from player to spawn
 ENEMY_SPAWN_DELAY = 1.0           # Delay between each enemy spawn in a wave
+ALL_ENEMIES = []
 
 #================== WAVE SYSTEM ==================
 
@@ -158,7 +159,7 @@ WAVE_START_TIME = 0               # When current wave started
 
 #================== GAME STATE ==================
 
-GAME_STATE = "playing"  # "playing", "paused", "game_over", "wave_complete", "wave_starting"
+GAME_STATE = "playing"  # "playing", "paused", "game_over", "wave_complete", "wave_starting", "shop"
 SCORE = 0
 ENEMIES_KILLED = 0
 
@@ -531,6 +532,25 @@ def update_and_draw_explosions():
 #         glutSolidSphere(current_radius, 20, 20)
 #         glPopMatrix()
 #         time.sleep(0.01)
+
+
+def check_wave_complete():
+    global GAME_STATE, ALL_ENEMIES, CURRENT_WAVE, WAVE_ACTIVE, WAVE_START_TIME
+
+    if WAVE_ACTIVE and len(ALL_ENEMIES) == 0:
+        WAVE_ACTIVE = False
+        GAME_STATE = "wave_complete"
+        print(f"Wave {CURRENT_WAVE} complete!")
+        end_wave_todo()
+
+def end_wave_todo():
+    global show_upgrade_menu, GAME_STATE, WAVE_START_TIME
+
+    show_upgrade_menu = True
+    GAME_STATE = "shop"
+
+def wave_start():
+    ...
 
 
 #===================== Ortho Upgrade Menu ===============================
@@ -932,53 +952,55 @@ def keyboardListener(key, x, y):
     global key_buffer,player_pos, camera_pos,PLAYER_ANGLE,PLAYER_SPEED, CAMERA_THETA, target_pos, POV, GAME_MODE
     global show_upgrade_menu
 
-    if key == b'w':
-        if POV == 0:
-            PlayerMovementThirdPerson(PLAYER_SPEED)
-        elif POV == 1:
-            PlayerMovementTopDown(0, PLAYER_SPEED, 0)
+    if show_upgrade_menu == False:
+        if key == b'w':
+            if POV == 0:
+                PlayerMovementThirdPerson(PLAYER_SPEED)
+            elif POV == 1:
+                PlayerMovementTopDown(0, PLAYER_SPEED, 0)
 
 
-    if key == b's':
-        if POV == 0:
-            PlayerMovementThirdPerson(-PLAYER_SPEED)
-        elif POV == 1:
-            PlayerMovementTopDown(0, -PLAYER_SPEED, 180)
+        if key == b's':
+            if POV == 0:
+                PlayerMovementThirdPerson(-PLAYER_SPEED)
+            elif POV == 1:
+                PlayerMovementTopDown(0, -PLAYER_SPEED, 180)
 
-    if key == b'a':
-        if POV == 0:
-            player_turn3P(-CAMERA_SPEED)
-        elif POV == 1:
-            PlayerMovementTopDown(-PLAYER_SPEED, 0, 270)
+        if key == b'a':
+            if POV == 0:
+                player_turn3P(-CAMERA_SPEED)
+            elif POV == 1:
+                PlayerMovementTopDown(-PLAYER_SPEED, 0, 270)
 
-    if key == b'd':
-        if POV == 0:
-            player_turn3P(CAMERA_SPEED)
-        elif POV == 1:
-            PlayerMovementTopDown(PLAYER_SPEED, 0, 90)
+        if key == b'd':
+            if POV == 0:
+                player_turn3P(CAMERA_SPEED)
+            elif POV == 1:
+                PlayerMovementTopDown(PLAYER_SPEED, 0, 90)
 
-    if key == b'e':
-        if GAME_MODE == 0:
-            if POV == 1:
-                camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
+        if key == b'e':
+            if GAME_MODE == 0:
+                if POV == 1:
+                    camera_pos = [player_pos[0], player_pos[1] - 1000, player_pos[2] + 800]
+                else:
+                    camera_pos = [0, 500, 6500]
+                    target_pos = [0, 500, 0]
+                POV = (POV + 1) % 2  # Toggle between 0 and 1
+                
+        if key == b' ':
+            if len(PLAYER_BOMB_INDEX) < NUMBER_OF_PLAYER_BOMBS:
+                plantBomb(player_pos, PLAYER_BOMB_INDEX)
             else:
-                camera_pos = [0, 500, 6500]
-                target_pos = [0, 500, 0]
-            POV = (POV + 1) % 2  # Toggle between 0 and 1
-            
-    if key == b' ':
-        if len(PLAYER_BOMB_INDEX) < NUMBER_OF_PLAYER_BOMBS:
-            plantBomb(player_pos, PLAYER_BOMB_INDEX)
-        else:
-            print("You have reached the bomb limit")
+                print("You have reached the bomb limit")
         
-    if key == b'f':
-        TriggerBomb()
+        if key == b'f':
+            TriggerBomb()
 
     if key == b'\r':  #enter
         if show_upgrade_menu:
             slect_and_apply_upgrade()
             show_upgrade_menu = False
+            #Todo: wave_start()
             
     #temporary
     if key == b'm':
